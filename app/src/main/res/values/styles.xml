@@ -1,0 +1,5 @@
+<resources><style name="Theme.Assistant" parent="android:style/Theme.Material.Light.NoActionBar">
+<item name="android:fontFamily">sans</item><item name="android:colorAccent">#6850C9</item>
+<item name="android:windowLightStatusBar">true</item><item name="android:windowLightNavigationBar">true</item>
+<item name="android:windowSoftInputMode">adjustResize</item>
+</style></resources>

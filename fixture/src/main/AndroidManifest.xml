@@ -1,0 +1,22 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <application android:label="Ассистент: тест полей" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:allowBackup="false">
+        <activity android:name=".ShareActivity" android:exported="true" />
+        <provider android:name=".ShareImageProvider" android:authorities="local.voice.fixture.shared" android:exported="false" android:grantUriPermissions="true" />
+        <activity android:name=".WeatherActivity" android:exported="true" />
+        <activity-alias android:name=".WeatherLauncher" android:targetActivity=".WeatherActivity" android:enabled="false" android:exported="true" android:label="Windy fixture"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity-alias>
+        <activity android:name=".CanvasScreenActivity" android:exported="true" />
+        <activity android:name=".TelegramActivity" android:exported="true" android:launchMode="singleTask" android:enableOnBackInvokedCallback="true" />
+        <activity-alias android:name=".TelegramLauncher" android:targetActivity=".TelegramActivity" android:enabled="false" android:exported="true" android:label="Telegram">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity-alias>
+        <service android:name=".MediaKeepAlive" android:exported="false" android:foregroundServiceType="mediaPlayback" />
+        <activity android:name=".LauncherControlActivity" android:exported="true" />
+        <activity android:name=".FocusActivity" android:exported="true" />
+        <activity android:name=".MediaActivity" android:exported="true" />
+        <activity android:name=".NotificationActivity" android:exported="true" />
+        <activity android:name=".FieldActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
+    </application>
+</manifest>

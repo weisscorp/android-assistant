@@ -1,0 +1,15 @@
+<resources>
+    <style name="Theme.Assistant.Console" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#83EDFA</item>
+        <item name="android:windowBackground">#060D16</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:statusBarColor">#060D16</item>
+        <item name="android:navigationBarColor">#060D16</item>
+        <item name="android:windowSplashScreenBackground">#060D16</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_core</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">#060D16</item>
+        <item name="android:windowSoftInputMode">adjustResize</item>
+    </style>
+</resources>

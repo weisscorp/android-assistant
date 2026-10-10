@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Ассистент</string>
+    <string name="cue_volume_label">Громкость сигналов: %1$d%%</string>
+    <string name="cue_volume_description">Громкость сигналов записи</string>
+    <string name="cue_volume_hint" formatted="false">По умолчанию — 10%. 0% выключает сигналы. Выбранный уровень сохраняется автоматически.</string>
+    <string name="accessibility_description">Позволяет по вашим голосовым командам читать доступные элементы приложений, нажимать выбранную кнопку и прокручивать экран. Нажатие требует голосового подтверждения. Не работает поверх блокировки телефона.</string>
+</resources>

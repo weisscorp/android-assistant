@@ -1,0 +1,24 @@
+<resources>
+    <item name="assistant_core" type="id" />
+    <item name="assistant_message" type="id" />
+    <item name="assistant_send" type="id" />
+    <item name="assistant_mic" type="id" />
+    <item name="assistant_stop" type="id" />
+    <item name="settings_scroll" type="id" />
+    <item name="settings_back" type="id" />
+    <item name="settings_endpoint" type="id" />
+    <item name="settings_token" type="id" />
+    <item name="settings_certificate" type="id" />
+    <item name="settings_cue_volume" type="id" />
+    <item name="settings_cue_volume_label" type="id" />
+    <item name="source_name" type="id" />
+    <item name="source_kind" type="id" />
+    <item name="source_value" type="id" />
+    <item name="source_participant" type="id" />
+    <item name="source_aliases" type="id" />
+    <item name="source_save" type="id" />
+    <item name="source_geocoder" type="id" />
+    <item name="source_instructions" type="id" />
+    <item name="source_follow_links" type="id" />
+    <item name="source_recipe" type="id" />
+</resources>

@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "artifacts": [
+    {
+      "id": "llama.cpp",
+      "group": "build",
+      "format": "source-tar",
+      "target": "vendor/llama.cpp",
+      "cache": "llama-v0.6.0.tar.gz",
+      "url": "https://codeload.github.com/ggml-org/llama.cpp/tar.gz/d81235049384534c167caea52b85a694f6103d14",
+      "sha256": "6b58785f0a82898f4c3442417ff962e2d4b231b1bee5d033902ad90b27901e14",
+      "revision": "d81235049384534c167caea52b85a694f6103d14",
+      "license": "MIT",
+      "maxBytes": 100000000
+    },
+    {
+      "id": "speexdsp",
+      "group": "build",
+      "format": "source-tar",
+      "target": "vendor/speexdsp",
+      "cache": "speexdsp-1b28a0f.tar.gz",
+      "url": "https://codeload.github.com/xiph/speexdsp/tar.gz/1b28a0f61bc31162979e1f26f3981fc3637095c8",
+      "sha256": "59a53188f6d6ca2b48752f533523986a0604d2526eb50789b8fb09aa6b12645f",
+      "revision": "1b28a0f61bc31162979e1f26f3981fc3637095c8",
+      "license": "BSD-3-Clause",
+      "maxBytes": 10000000
+    },
+    {
+      "id": "sherpa-onnx",
+      "group": "build",
+      "format": "file",
+      "target": "app/libs/sherpa-onnx-1.13.8.aar",
+      "cache": "sherpa-onnx-1.13.8.aar",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-1.13.8.aar",
+      "sha256": "633c24321e06b1fe79feafa03ea16cbc0f8a286641e2da3559bac91bdb13bd96",
+      "license": "Apache-2.0; contains GPL-3.0-or-later espeak-ng and MIT ONNX Runtime",
+      "maxBytes": 200000000
+    },
+    {
+      "id": "tesseract4android",
+      "group": "build",
+      "format": "file",
+      "target": "app/libs/tesseract4android-4.9.0.aar",
+      "cache": "tesseract4android-4.9.0.aar",
+      "url": "https://jitpack.io/cz/adaptech/tesseract4android/tesseract4android/4.9.0/tesseract4android-4.9.0.aar",
+      "sha256": "bce5d6413a1a5ae3d7240033fbbc851ba3217d0a08d9769400e17a077f42cb2a",
+      "license": "Apache-2.0",
+      "maxBytes": 20000000
+    },
+    {
+      "id": "t-one-ru",
+      "group": "speech",
+      "format": "model-tar",
+      "target": "app/src/main/assets/speech-tone-ru.zip",
+      "cache": "sherpa-t-one-ru-2025-09-08.tar.bz2",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-t-one-russian-2025-09-08.tar.bz2",
+      "sha256": "b9c907450e99a6e5049e279bf18368a17db0bdc5e63b7fa978943138debbe3ae",
+      "license": "Apache-2.0, T-Software DC",
+      "maxBytes": 180000000,
+      "members": {
+        "model.onnx": "5ded080e2a6c86ecc11bcb0902d77524eb3e8b0844cb0c0754347f5aafb4dabc",
+        "tokens.txt": "27f7b3ba2096c572375fba1a6b29af1f80d86e08a329940612908112695f97e0",
+        "LICENSE": "c8e6ecb86af681d9815d1ada7b1a7780ea5e5cb68a5df94fc800adab1a6ce027"
+      }
+    },
+    {
+      "id": "vosk-small-ru",
+      "group": "speech",
+      "format": "file",
+      "target": "app/src/main/assets/speech-ru.zip",
+      "cache": "vosk-model-small-ru-0.22.zip",
+      "url": "https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip",
+      "sha256": "961d5ff98a17f4aa6de69864d0aa71fa5bac682301d2b5d17a3f24c5c99a46d4",
+      "license": "Apache-2.0",
+      "maxBytes": 100000000
+    },
+    {
+      "id": "piper-ruslan",
+      "group": "piper",
+      "format": "model-tar",
+      "target": "app/src/main/assets/voice-ru.zip",
+      "cache": "vits-piper-ru_RU-ruslan-medium-int8.tar.bz2",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-ru_RU-ruslan-medium-int8.tar.bz2",
+      "sha256": "93b9f8c7b34c1420bdc253a0ce5ab1cb6b6be2e8fa26c1f3b36c6189233c3e7e",
+      "license": "Ruslan corpus CC-BY-NC-SA-4.0; espeak-ng GPL-3.0-or-later",
+      "maxBytes": 60000000,
+      "noncommercial": true
+    },
+    {
+      "id": "ocr-rus",
+      "group": "ocr",
+      "format": "file",
+      "target": "app/src/main/assets/ocr/tessdata/rus.traineddata",
+      "cache": "rus.traineddata",
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/rus.traineddata",
+      "sha256": "e16e5e036cce1d9ec2b00063cf8b54472625b9e14d893a169e2b0dedeb4df225",
+      "license": "Apache-2.0",
+      "maxBytes": 10000000
+    },
+    {
+      "id": "ocr-eng",
+      "group": "ocr",
+      "format": "file",
+      "target": "app/src/main/assets/ocr/tessdata/eng.traineddata",
+      "cache": "eng.traineddata",
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/eng.traineddata",
+      "sha256": "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2",
+      "license": "Apache-2.0",
+      "maxBytes": 10000000
+    }
+  ]
+}
