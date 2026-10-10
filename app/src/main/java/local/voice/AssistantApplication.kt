@@ -13,7 +13,12 @@ class AssistantApplication : Application(), Application.ActivityLifecycleCallbac
         OtaClient.consumeBootstrap(this)
         runCatching { AutoUpdates.schedule(this) }
     }
-    override fun onActivityResumed(activity: Activity) { resumed++; foreground = true }
+    override fun onActivityResumed(activity: Activity) {
+        resumed++; foreground = true
+        // A development administrator can provision while an assistant service
+        // already keeps the process alive; an ordinary screen open consumes it.
+        OtaClient.consumeBootstrap(this)
+    }
     override fun onActivityPaused(activity: Activity) {
         resumed = maxOf(0, resumed - 1); foreground = resumed > 0
         if (!foreground) runCatching { AutoUpdates.schedule(this, immediate = true) }
