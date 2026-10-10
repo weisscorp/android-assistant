@@ -7,6 +7,7 @@ import android.os.ParcelFileDescriptor
 import android.provider.Settings
 import android.view.View
 import android.view.ViewTreeObserver
+import android.widget.FrameLayout
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
@@ -94,12 +95,18 @@ class MascotUiTest {
                 }
             }
             assertTrue("States were visually indistinguishable", fingerprints.size >= 5)
+            val compactHeight = (72 * context.resources.displayMetrics.density).toInt()
             instrumentation.runOnMainSync {
-                core.mode = AssistantCoreView.Mode.IDLE
-                core.layoutParams = core.layoutParams.apply { height = (72 * core.resources.displayMetrics.density).toInt() }
+                // MainActivity owns its renderer's height through a global layout listener.
+                // A separate instance prevents that listener from resizing the compact fixture.
+                core = AssistantCoreView(activity)
+                val host = FrameLayout(activity)
+                host.addView(core, FrameLayout.LayoutParams(-1, compactHeight, android.view.Gravity.CENTER))
+                activity.setContentView(host)
             }
             Thread.sleep(250)
             instrumentation.runOnMainSync {
+                assertEquals("Compact fixture did not actually resize the mascot", compactHeight, core.height)
                 val bitmap = Bitmap.createBitmap(core.width, core.height, Bitmap.Config.ARGB_8888)
                 core.draw(Canvas(bitmap))
                 File(directory, "compact.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
