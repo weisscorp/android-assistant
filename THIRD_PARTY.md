@@ -8,6 +8,7 @@ are not Git content; preparing a build does not relicense them.
 
 | Component / authors | Role | Terms and source |
 |---|---|---|
+| Coucou / Louis Raillé | Generic tween/keyframe interpolation and easing adapted to Kotlin; original Android robot artwork | [MIT notice](app/src/main/assets/licenses/Coucou-LICENSE.txt), [pinned source](https://github.com/Louis-CFM/coucou/blob/5cb2a27af352cf7319569920aac899efd42b54bc/NotchBuddy/Sources/CoucouKit/BotEngine.swift), [reuse boundaries](docs/mascot.md) |
 | llama.cpp / ggml authors | GGUF inference and Jinja templates through JNI | [MIT](licenses/llama.cpp-LICENSE), [source](https://github.com/ggml-org/llama.cpp) |
 | SpeexDSP / Xiph.Org and contributors | Echo cancellation/noise suppression | [BSD-3-Clause](licenses/speexdsp-COPYING), [source](https://github.com/xiph/speexdsp) |
 | Vosk / Alpha Cephei and contributors | Offline ASR fallback | [Apache-2.0](https://github.com/alphacep/vosk-api/blob/master/COPYING) |
@@ -69,6 +70,11 @@ retain Open-Meteo/model and GeoNames attribution. Its hosted API terms and
 [Coucou by Louis Raillé](https://github.com/Louis-CFM/coucou) (MIT),
 [Hermes by Nous Research](https://github.com/NousResearch/hermes-agent) (MIT),
 [Agent Orchestrator](https://github.com/OrchestratorInc/agent-orchestrator) (Apache-2.0)
-and [Codex](https://github.com/openai/codex) (Apache-2.0). Their code/assets are
-not copied into Android. The Coucou mascot/animation are credited as inspiration
-and a possible future integration, not claimed as our completed implementation.
+and [Codex](https://github.com/openai/codex) (Apache-2.0). Apart from the generic
+Coucou interpolation/easing mechanics credited above, their code/assets are not
+copied into Android. Coucou's **Mochi character, its appearance/character animations,
+names, icons and sounds are not MIT**: see its separate
+[asset license](https://github.com/Louis-CFM/coucou/blob/v0.2.3/LICENSE-ASSETS.md).
+Publication/distribution with those assets requires written author permission.
+This Android app uses its own robot design and state choreography, with no Mochi
+assets, poses, geometry, costumes or sounds. [Implementation notes](docs/mascot.md).
