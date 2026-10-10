@@ -1,20 +1,21 @@
 # Android mascot
 
 The home screen and the system voice-assistant window use the same native
-`AssistantCoreView`. The character is an original ceramic robot with a polygonal
-body, recessed visor, antenna and two separate microphone sensor pods.
+`AssistantCoreView`. The character is an original soft, asymmetric goo creature
+with oversized ivory eyes, a small mouth and a dark teal jelly body. Its contour
+wobbles, squashes and stretches while its eyes blink and follow conversation states.
 Its animations react to the existing conversation phases, without starting
 audio, requesting permissions, sending data or calling a model.
 
 | Conversation state | Visible behavior |
 |---|---|
 | Ready / idle | Relaxed open eyes, subtle breathing and occasional blink |
-| Starting / routing / loading | Antenna light pulses; three progress lights |
-| Listening | Attentive raised pose; microphone RMS drives the sensor meters |
-| Thinking / contact lookup | Tilted head and antenna; eyes look up; progress lights |
-| Speaking | Synthesized PCM level drives the mouth display |
-| Tool / server work | Scanning eyes and progress lights |
-| Error / silenced microphone | Distinct eyes, tilted pose and visible warning badge; existing explanatory text remains |
+| Starting / routing / loading | Curious upward glance; three softly pulsing motes |
+| Listening | Raised, stretched pose; microphone RMS gently stretches the body |
+| Thinking / contact lookup | Tilted body and upward sideways glance; progress motes |
+| Speaking | Synthesized PCM level opens the mouth and gently deforms the body |
+| Tool / server work | Small elastic hops, scanning eyes and progress motes |
+| Error / silenced microphone | Slumped body, worried eyebrows and a frown; existing explanatory text remains |
 
 Text-only conversations never show a listening microphone or animate speech.
 The adjacent status text and normal start/finish/stop controls remain accessible.
@@ -22,7 +23,8 @@ The mascot draws no transcripts, names, coordinates or replies on the lock scree
 
 Only this small view animates, at up to 30 fps while active and 15 fps while idle.
 Callbacks stop when hidden or detached. Geometry, paths, paints and gradients are
-cached; no WebView, bitmap sprites, external animation runtime or new dependency
+reused; the same mutable paths form the deforming outline and face. No WebView,
+bitmap sprites, external animation runtime or new dependency
 is needed. When Android's animator duration scale is disabled, poses settle into
 static expressions and all animation callbacks stop. Re-enabling the setting
 while the view is visible resumes animation.
@@ -46,7 +48,11 @@ and demo media are reserved by the author. They are not part of this Android
 source release. Written author permission would be needed to distribute an
 Android build with the actual Mochi character. The generic MIT mechanics do not
 grant permission to copy its artwork or character choreography. This version
-therefore contains original robot geometry and original state poses instead.
+therefore contains original goo geometry and original state poses instead.
+
+The soft-body direction was inspired by the playful creatures in **World of Goo**.
+This implementation uses no game images, extracted assets, sounds or animations;
+its silhouette, palette, face and motion are drawn in Kotlin for this project.
 
 The model catalog, voice pipeline, tools and Hub protocol are independent of the
 renderer. A mascot does not add remote tool execution or alter shared memory.

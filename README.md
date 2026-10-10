@@ -19,7 +19,7 @@ on-device speech, local GGUF models and an optional connection to
 - Saved user knowledge/aliases, share-intent ingestion, server sync and a polling inbox.
 - A bounded local interaction journal (50 MB) for request/model/tool/action analysis,
   with settings to disable, export and clear it.
-- An original native robot mascot with listening/thinking/speaking states,
+- An original native goo mascot with elastic motion, expressive eyes and listening/thinking/speaking states,
   live audio-level reactions and an adapted Coucou tween/easing engine.
 
 No Google Play services are required by the included local voice pipeline. Android
@@ -31,7 +31,7 @@ This is a development release, not a promise of reliable unrestricted app contro
 The code includes experimental tools and earlier release/update client modules.
 The launcher/CI in this repository do not install APKs or test physical devices.
 The generic animation mechanics reuse Coucou's MIT code with attribution. The
-robot's artwork and state choreography are our own: Mochi itself has a separate
+goo character's artwork and state choreography are our own: Mochi itself has a separate
 asset license and is not bundled. See [mascot notes](docs/mascot.md) and
 [credits and reuse boundaries](THIRD_PARTY.md).
 

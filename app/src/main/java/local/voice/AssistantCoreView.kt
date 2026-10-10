@@ -63,18 +63,18 @@ internal class AssistantCoreView(context: Context) : View(context) {
         motion.settle()
     }
     private fun eyes() = when (mode) {
-        Mode.LISTENING -> 1.15f
-        Mode.THINKING -> .65f
-        Mode.IDLE -> .85f
+        Mode.LISTENING -> 1.08f
+        Mode.THINKING -> .82f
+        Mode.IDLE -> .95f
         else -> 1f
     }
     private fun pose() {
         fun target(channel: Channel, value: Float) = motion.animate(channel, Key(value, 240f, Ease.OUT))
-        target(Channel.SCALE_X, if (mode == Mode.LISTENING) 1.02f else 1f)
-        target(Channel.SCALE_Y, if (mode == Mode.ERROR) .96f else 1f)
+        target(Channel.SCALE_X, when (mode) { Mode.LISTENING -> .94f; Mode.ERROR -> 1.06f; else -> 1f })
+        target(Channel.SCALE_Y, when (mode) { Mode.LISTENING -> 1.06f; Mode.ERROR -> .94f; else -> 1f })
         target(Channel.LIFT, when (mode) { Mode.LISTENING -> 10f; Mode.THINKING -> 8f; Mode.ERROR -> 0f; else -> 4f })
         target(Channel.TILT, when (mode) { Mode.THINKING -> -5f; Mode.ERROR -> 5f; else -> 0f })
-        target(Channel.ANTENNA, when (mode) { Mode.THINKING -> 7f; Mode.ERROR -> -6f; else -> 0f })
+        target(Channel.WOBBLE, when (mode) { Mode.THINKING -> 4f; Mode.ERROR -> -4f; else -> 0f })
         target(Channel.EYES, eyes())
         blinkAt = time + 3.2f
         if (!ValueAnimator.areAnimatorsEnabled()) motion.settle()
@@ -112,7 +112,7 @@ internal class AssistantCoreView(context: Context) : View(context) {
         if (isVisible) { invalidate(); schedule() }
     }
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        // Keep antenna, pods and progress marks inside even the compact keyboard layout.
+        // Keep the jelly silhouette, shadow and progress motes inside the compact layout.
         unit = min(w / 300f, h / 260f)
         centerX = w / 2f; centerY = h / 2f - 12f * unit
     }
