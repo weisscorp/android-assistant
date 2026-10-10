@@ -85,9 +85,11 @@ class AutoUpdateTest {
         assertEquals("still here after replacement", context.getSharedPreferences("dev_ota", 0).getString("preservation_fixture", ""))
         assertTrue(OtaClient.enabled(context))
         Updates.reconcile(context)
-        assertEquals("installed", Updates.state(context))
+        // The base is a debug APK, the published candidate is release-signed.
+        // Do not call debug-mangled Kotlin internal accessors in that new process.
+        assertEquals("installed", context.getSharedPreferences("updates", 0).getString("state", ""))
         assertNotNull(context.getSystemService(JobScheduler::class.java).getPendingJob(AutoUpdates.PERIODIC_JOB))
-        assertNull(VoiceConversation.activePhase)
+        assertNull(VoiceConversation::class.java.getDeclaredField("activeConversation").apply { isAccessible = true }.get(null))
         assertTrue(context.getSystemService(AudioManager::class.java).activeRecordingConfigurations.isEmpty())
     }
 }

@@ -17,7 +17,7 @@ Importing an owner-supplied JSON settings file can enable them explicitly:
 
 Treat that file as a credential; delete the external copy after importing it.
 A development administrator can provision the same JSON as `dev-ota-setup.json`
-inside the app's private files directory. On the next ordinary process start it
+inside the app's private files directory. On the next ordinary process start or screen resume it
 is encrypted, consumed and deleted. There is no exported provisioning intent.
 Never bundle keys or machine addresses in a distributed APK.
 
