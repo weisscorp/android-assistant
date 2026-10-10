@@ -415,6 +415,8 @@ class VoiceConversation internal constructor(
                 then = { inbox.markSpoken(device, reading.second); listen() })
         } else if (command is VoiceCommand.Notifications) {
             readNotifications(command)
+        } else if (command is VoiceCommand.Codex) {
+            askCodex(command.request)
         } else if (command is VoiceCommand.Server || command == VoiceCommand.ServerStatus || command == VoiceCommand.ServerCancel) {
             submitServer(command)
         } else if (command is VoiceCommand.Chat) {
@@ -501,6 +503,23 @@ class VoiceConversation internal constructor(
         if (reply.appSelection) {
             pendingTelegram = request to (SystemClock.elapsedRealtime() + 60_000); deliver(reply)
         } else continueTelegram(request, reply)
+    }
+    private fun askCodex(text: String) {
+        journal?.event("request_route", InteractionJournal.data("name" to "codex_hub", "text" to text))
+        tools.clear(); localRequest = null
+        diagnostics.phase(Phase.SERVER); status("Codex · жду ответ Hub…")
+        val generation = turn
+        val activeRequest = BackendClient.Request().also { request = it }
+        deadline(generation, 40_000); monitorStop()
+        network.execute {
+            val result = runCatching { CodexRequests.ask(context, text, activeRequest) }
+            main.post {
+                if (!closed && generation == turn) {
+                    clearWorkDeadline(); request = null
+                    say(result.getOrElse { "Hub не подтвердил запрос Codex. Автоматического повтора нет; проверьте задачу." })
+                }
+            }
+        }
     }
     private fun askHermes(text: String) {
         journal?.event("request_route", InteractionJournal.data("name" to "hermes", "text" to text))

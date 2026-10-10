@@ -112,6 +112,9 @@ UUID retries and a bounded queue. No incoming event runs device actions or speak
 automatically. Doze can delay delivery. See the Hub's
 [webhook documentation](https://github.com/weisscorp/assistant-hub/blob/main/docs/webhooks.md).
 
+Codex tasks can be listed, selected, read and continued by direct voice/text
+commands through Hub, without loading the phone LLM. See [Codex voice](docs/codex-voice.md).
+
 Saving a different endpoint or credential retires that profile's pending events;
 they are never sent under the new connection. The inbox displays recent outgoing
 events and whether Hub accepted or rejected them.
