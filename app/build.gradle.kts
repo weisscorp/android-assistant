@@ -8,8 +8,8 @@ android {
         minSdk = 33
         targetSdk = 35
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = providers.gradleProperty("helmetVersionCode").orElse("75").get().toInt()
-        versionName = providers.gradleProperty("helmetVersionName").orElse("0.32.10").get()
+        versionCode = providers.gradleProperty("helmetVersionCode").orElse("76").get().toInt()
+        versionName = providers.gradleProperty("helmetVersionName").orElse("0.33.0").get()
         ndk { abiFilters += "arm64-v8a" }
         externalNativeBuild { cmake { arguments += listOf("-DCMAKE_BUILD_TYPE=Release", "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON") } }
     }

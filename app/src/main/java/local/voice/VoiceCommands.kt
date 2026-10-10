@@ -8,6 +8,7 @@ sealed interface VoiceCommand {
     data object Capabilities : VoiceCommand
     data object People : VoiceCommand
     data object Sources : VoiceCommand
+    data class HubEvent(val text: String) : VoiceCommand
     data class HomeMessages(val latest: Boolean) : VoiceCommand
     data class ReadSource(val alias: String) : VoiceCommand
     data class BrainMode(val mode: AssistantRequests.Mode) : VoiceCommand
@@ -56,6 +57,7 @@ object VoiceCommands {
             value in setOf("да", "подтверждаю", "выполняй") -> VoiceCommand.Confirm
             value in setOf("нет", "отмена", "отмени") -> VoiceCommand.Cancel
             choice(value) != null -> VoiceCommand.Choose(choice(value)!!)
+            value.startsWith("отправь событие в хаб ") -> VoiceCommand.HubEvent(raw.substring("отправь событие в хаб ".length).trim())
             value in setOf("который час", "сколько времени", "время") -> VoiceCommand.Time
             ClockRequests.parse(raw) != null -> VoiceCommand.Clock(ClockRequests.parse(raw)!!)
             value in setOf("заряд", "батарея", "сколько заряда", "заряд батареи") -> VoiceCommand.Battery

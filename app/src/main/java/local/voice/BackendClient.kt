@@ -104,7 +104,7 @@ object BackendClient {
     }
     internal fun link(context: Context, method: String, path: String, body: ByteArray?, request: Request): Pair<Int, JSONObject> {
         require(method in setOf("POST", "GET"))
-        require(path.matches(Regex("/link/[0-9a-f-]{36}/(?:knowledge|ack|image/[0-9a-f]{64}|events(?:\\?after=[0-9]+&wait=[0-9]+)?)")))
+        require(path.matches(Regex("/link/[0-9a-f-]{36}/(?:knowledge|ack|presence|receipt|image/[0-9a-f]{64}|events(?:\\?after=[0-9]+&wait=[0-9]+)?)")))
         require(body == null || body.size <= if ("/image/" in path) 10_485_760 else 4_194_304)
         request.ensureActive()
         val connection = open(context, path)
@@ -122,6 +122,28 @@ object BackendClient {
             val bytes = stream?.use { it.readNBytes(196_609) } ?: ByteArray(0)
             check(bytes.size <= 196_608)
             request.ensureActive()
+            return code to if (bytes.isEmpty()) JSONObject() else JSONObject(bytes.toString(Charsets.UTF_8))
+        } finally { request.detach(); connection.disconnect() }
+    }
+
+    internal fun webhook(context: Context, id: String, body: ByteArray, targets: String, request: Request): Pair<Int, JSONObject> {
+        require(java.util.UUID.fromString(id).toString() == id && body.size in 1..65_536)
+        require(targets in setOf("auto", "phone", "desktop", "both"))
+        request.ensureActive()
+        val connection = open(context, "/webhooks/events")
+        try {
+            request.attach(connection); connection.requestMethod = "POST"; connection.doOutput = true
+            connection.setFixedLengthStreamingMode(body.size)
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            connection.setRequestProperty("Idempotency-Key", id)
+            connection.setRequestProperty("X-Event-Source", "android")
+            connection.setRequestProperty("X-Event-Title", "%D0%A1%D0%BE%D0%B1%D1%8B%D1%82%D0%B8%D0%B5%20%D1%81%20%D1%82%D0%B5%D0%BB%D0%B5%D1%84%D0%BE%D0%BD%D0%B0")
+            connection.setRequestProperty("X-Event-Targets", targets)
+            connection.outputStream.use { it.write(body) }
+            val code = connection.responseCode
+            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+            val bytes = stream?.use { it.readNBytes(8193) } ?: ByteArray(0)
+            check(bytes.size <= 8192); request.ensureActive()
             return code to if (bytes.isEmpty()) JSONObject() else JSONObject(bytes.toString(Charsets.UTF_8))
         } finally { request.detach(); connection.disconnect() }
     }

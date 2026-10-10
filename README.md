@@ -96,3 +96,18 @@ Original licenses and notices are retained. The Hub integrates the original
 [Coucou](https://github.com/Louis-CFM/coucou), [Hermes](https://github.com/NousResearch/hermes-agent)
 and [Agent Orchestrator](https://github.com/OrchestratorInc/agent-orchestrator);
 their authorship and licensing remain separate from this Android application.
+
+## Hub events
+
+The authenticated Hub can assess incoming webhooks and deliver reports to the
+phone and the Coucou mascot area. Important phone messages use a separate silent
+heads-up channel; Android permissions/channel preferences remain authoritative.
+The inbox can send an event with a target selector; voice/text command:
+`отправь событие в хаб ...`. Events are stored locally until accepted, with stable
+UUID retries and a bounded queue. No incoming event runs device actions or speaks
+automatically. Doze can delay delivery. See the Hub's
+[webhook documentation](https://github.com/weisscorp/assistant-hub/blob/main/docs/webhooks.md).
+
+Saving a different endpoint or credential retires that profile's pending events;
+they are never sent under the new connection. The inbox displays recent outgoing
+events and whether Hub accepted or rejected them.

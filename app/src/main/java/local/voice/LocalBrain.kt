@@ -131,6 +131,11 @@ object LocalBrain {
                     "scroll_up" -> VoiceCommand.Scroll(false)
                     "navigate" -> VoiceCommand.Navigate(argument.take(300))
                     "call" -> VoiceCommand.Call(argument.take(120))
+                    "hub_event" -> {
+                        require(observation == null)
+                        val explicit = VoiceCommands.parse(text) as? VoiceCommand.HubEvent ?: error("Event not explicitly requested")
+                        explicit
+                    }
                     "server" -> ServerDelegation.command(argument, text, observation != null)
                     "answer" -> null
                     else -> error("Unknown tool")

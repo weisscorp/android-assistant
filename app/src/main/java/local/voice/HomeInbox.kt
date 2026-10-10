@@ -21,6 +21,7 @@ internal class HomeInbox(private val context: Context) {
     data class Entry(val seq: Long, val id: String, val title: String, val body: String, val source: String, val createdAt: Long)
     companion object {
         private const val CHANNEL = "hermes_messages_quiet_v1"
+        internal const val POPUP_CHANNEL = "hub_messages_popup_silent_v1"
         @Volatile private var helper: Database? = null
         @Synchronized private fun database(context: Context) = helper ?: Database(context.applicationContext).also { helper = it }
         private class Database(context: Context) : SQLiteOpenHelper(context, "home-inbox.db", null, 1) {
@@ -94,18 +95,29 @@ internal class HomeInbox(private val context: Context) {
             description = "Тихие сообщения домашнего агента. Озвучка только по запросу."
             setSound(null, null); enableVibration(false); lockscreenVisibility = Notification.VISIBILITY_PRIVATE
         })
-        if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED || !manager.areNotificationsEnabled() || manager.getNotificationChannel(CHANNEL)?.importance == NotificationManager.IMPORTANCE_NONE) return
+        manager.createNotificationChannel(NotificationChannel(POPUP_CHANNEL, "Важные события Hub", NotificationManager.IMPORTANCE_HIGH).apply {
+            description = "Тихие всплывающие сообщения поверх приложений. Озвучка по запросу."
+            setSound(null, null); enableVibration(false); lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+        })
+        val permitted = context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED && manager.areNotificationsEnabled()
+        val receipts = HomeEvents(context)
         val pending = db.rawQuery("SELECT seq,data FROM inbox WHERE device=? AND announced=0 AND seen=0 ORDER BY seq LIMIT 100", arrayOf(device)).use { cursor ->
             buildList { while (cursor.moveToNext()) add(cursor.getLong(0) to JSONObject(cursor.getString(1))) }
         }
         pending.forEach { (seq, json) ->
             if (device != HomeLink.device(context) || !HomeLink.enabled(context)) return
+            val popup = context.getSharedPreferences("settings", 0).getBoolean("home_popup_notifications", true)
+            val channel = if (HomeNotificationPolicy.popup(json.getString("kind"), json.getString("priority"), popup)) POPUP_CHANNEL else CHANNEL
+            if (!permitted || manager.getNotificationChannel(channel)?.importance == NotificationManager.IMPORTANCE_NONE) {
+                receipts.receipt(device, json.getString("id"), "blocked"); return@forEach
+            }
             val open = PendingIntent.getActivity(context, 0, Intent(context, HomeInboxActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-            val public = Notification.Builder(context, CHANNEL).setSmallIcon(R.drawable.ic_assistant).setContentTitle("Сообщение от Hermes").setContentText("Откройте помощника для чтения").build()
-            manager.notify("home-$device-${json.getString("id")}", 0, Notification.Builder(context, CHANNEL)
+            val public = Notification.Builder(context, channel).setSmallIcon(R.drawable.ic_assistant).setContentTitle("Сообщение от Hermes").setContentText("Откройте помощника для чтения").build()
+            manager.notify("home-$device-${json.getString("id")}", 0, Notification.Builder(context, channel)
                 .setSmallIcon(R.drawable.ic_assistant).setContentTitle(json.getString("title")).setContentText(json.getString("source"))
                 .setStyle(Notification.BigTextStyle().bigText(json.getString("body"))).setContentIntent(open)
                 .setVisibility(Notification.VISIBILITY_PRIVATE).setPublicVersion(public).setSound(null).setVibrate(null).setDefaults(0).setOnlyAlertOnce(true).setAutoCancel(true).build())
+            receipts.receipt(device, json.getString("id"), "submitted")
             db.execSQL("UPDATE inbox SET announced=1 WHERE device=? AND seq=?", arrayOf(device, seq))
         }
         trimRead(device)

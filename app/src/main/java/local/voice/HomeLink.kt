@@ -28,7 +28,10 @@ object HomeLink {
     }
     @Synchronized fun changedServer(context: Context) {
         request?.cancel()
-        prefs(context).getString("device", null)?.let { java.io.File(context.filesDir, "home-knowledge-$it.json").delete() }
+        prefs(context).getString("device", null)?.let {
+            java.io.File(context.filesDir, "home-knowledge-$it.json").delete()
+            HomeEvents(context).retire(it)
+        }
         prefs(context).edit().clear().putString("device", UUID.randomUUID().toString()).commit()
         kick(context)
     }
@@ -84,6 +87,12 @@ object HomeLink {
                 }
             }
             operation.ensureActive()
+            val unlocked = !context.getSystemService(android.app.KeyguardManager::class.java).isDeviceLocked
+            val activity = unlocked && (AssistantApplication.foreground || VoiceConversation.activePhase?.let { it != SessionDiagnostics.Phase.STOPPED } == true)
+            val presence = JSONObject().put("active", activity).toString().toByteArray()
+            val (presenceCode, _) = BackendClient.link(context, "POST", "/link/$device/presence", presence, operation)
+            check(presenceCode in setOf(200, 404)) { "Presence failed" }
+            HomeEvents(context).flush(device, operation)
             val inbox = HomeInbox(context)
             val (code, json) = BackendClient.link(context, "GET", "/link/$device/events?after=${inbox.cursor(device)}&wait=$wait", null, operation)
             if (code == 404) prefs(context).edit().remove("synced_revision").remove("uploaded_images").commit()
@@ -95,6 +104,7 @@ object HomeLink {
             operation.ensureActive(); check(device == device(context))
             inbox.accept(device, json.getJSONArray("events"))
             inbox.notifyPending(device)
+            HomeEvents(context).flush(device, operation)
             val (ack, _) = BackendClient.link(context, "POST", "/link/$device/ack", JSONObject().put("through", inbox.cursor(device)).toString().toByteArray(), operation)
             check(ack == 200) { "Ack failed" }
             synchronized(this) { operation.ensureActive(); check(device == device(context)); prefs(context).edit().putString("status", "Знания синхронизированы. Сообщения получены.").putLong("checked_at", System.currentTimeMillis()).apply() }
@@ -107,7 +117,7 @@ object HomeLink {
     internal fun cancelRequest() { request?.cancel() }
     fun status(context: Context) = if (!enabled(context)) "Подключите Hermes и включите синхронизацию."
         else prefs(context).getString("status", "Ожидаю первого соединения с Hermes.").orEmpty() +
-            "\nУстройство: ${device(context)}\nНепрочитанных: ${HomeInbox(context).unreadCount()}"
+            "\nУстройство: ${device(context)}\nНепрочитанных: ${HomeInbox(context).unreadCount()}\nИсходящих событий: ${HomeEvents(context).pendingCount()}"
 }
 
 class HomeLinkJob : JobService() {

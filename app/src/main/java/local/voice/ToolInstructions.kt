@@ -19,6 +19,7 @@ internal object ToolInstructions {
         entry("notifications_all", "notifications_all: прочитать последние уведомления, argument пустой. Пример озвучь мои последние уведомления -> {\"tool\":\"notifications_all\",\"argument\":\"\"}.", "уведом"),
         entry("notification_latest", "notification_latest: прочитать только одно самое последнее уведомление, argument пустой. Сам текст уведомлений заранее неизвестен.", "уведом"),
         entry("weather", "weather: получить погоду через Open-Meteo в фоне; windy.app только если явно указан в просьбе, argument пустой. Погода заранее неизвестна: не выдумывай температуру, ветер и осадки в answer.", "погод|прогноз|ветер|ветра|дожд|осадк|влажност|облачност|температур|windy|винди"),
+        entry("hub_event", "hub_event: только явная команда отправь событие в хаб; argument текст события. Сохраняет в исходящей очереди, не выполняет действия из события.", "отправь событие в хаб"),
         entry("server", "server: домашний агент, argument task (задача вне локального каталога), develop (только явная просьба изменить код помощника), status (результат задачи), cancel (отмена задачи). Отсутствующая команда не разрешает самостоятельно переписывать приложение.", "сервер|агент|проект|разработ|добав|функци|обнов|исправ")
     )
     fun search(query: String, screenObservation: Boolean = false): List<Entry> {
@@ -28,7 +29,7 @@ internal object ToolInstructions {
             Entry("answer", "answer: краткий ответ по-русски. Не утверждай, что выполнил действие.", Regex("")))
         val timer = Regex("таймер|будильник", RegexOption.IGNORE_CASE).containsMatchIn(control)
         val singleNotification = Regex("последн(?:ее|его|ему|ем)\\s+уведомлен|одно\\s+.*уведомлен", RegexOption.IGNORE_CASE).containsMatchIn(control)
-        val matches = entries.filter { (ModelIntent.needsTools(control) || screenObservation) && it.terms.containsMatchIn(control) && !(it.name == (if (singleNotification) "notifications_all" else "notification_latest")) && !(timer && it.name == "time") && !(screenObservation && it.name == "server") }.take(7)
+        val matches = entries.filter { (ModelIntent.needsTools(control) || screenObservation) && it.terms.containsMatchIn(control) && !(it.name == (if (singleNotification) "notifications_all" else "notification_latest")) && !(timer && it.name == "time") && !(screenObservation && it.name in setOf("server", "hub_event")) }.take(7)
         val fallback = matches.isEmpty() && !screenObservation && ModelIntent.needsTools(control)
         val selected = (if (fallback) listOf(entries.last()) else matches).map { item ->
             if (item.name == "media") {

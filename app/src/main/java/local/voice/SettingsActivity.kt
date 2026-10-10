@@ -424,11 +424,19 @@ class SettingsActivity : Activity() {
             button("Сообщения от Hermes") { startActivity(Intent(this, HomeInboxActivity::class.java)) }
             button("Разрешить уведомления от Hermes") { requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 7312) }
             content.addView(Switch(this).apply {
+                text = "Всплывающие важные события Hub"; setTextColor(palette.text)
+                isChecked = prefs.getBoolean("home_popup_notifications", true)
+                setOnCheckedChangeListener { _, enabled -> prefs.edit().putBoolean("home_popup_notifications", enabled).commit(); HomeLink.kick(this@SettingsActivity) }
+            })
+            button("Системные настройки уведомлений") {
+                startActivity(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName))
+            }
+            content.addView(Switch(this).apply {
                 text = "Разрешить читать сообщения при блокировке"; setTextColor(palette.text)
                 isChecked = prefs.getBoolean("home_read_when_locked", false)
                 setOnCheckedChangeListener { _, enabled -> prefs.edit().putBoolean("home_read_when_locked", enabled).commit() }
             })
-            label("Уведомления тихие. Для озвучки: «прочитай сообщения от Гермеса» или «прочитай». Сообщение об обновлении не запускает установку. Источники Slack и почты подключаются на домашнем сервере.")
+            label("Важные события могут всплывать поверх приложений, если Android разрешает. Все каналы создаются без звука и вибрации. Для озвучки: «прочитай сообщения от Гермеса» или «прочитай». Сообщение об обновлении не запускает установку. Источники Slack и почты подключаются на домашнем сервере.")
         }
         group("Обновления приложения", "Версия, SHA-256 и подпись проверяются до установки.") {
         button("Проверить и установить OTA") {
