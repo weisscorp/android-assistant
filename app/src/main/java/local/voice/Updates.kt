@@ -28,6 +28,9 @@ object Updates {
         }
     }
     private fun preferences(context: Context) = context.getSharedPreferences("updates", 0)
+    internal fun state(context: Context) = preferences(context).getString("state", "").orEmpty()
+    internal fun ready(context: Context): File? = if (state(context) == "ready" &&
+        preferences(context).getString("source", OtaClient.source(context)) == OtaClient.source(context)) cached(context)?.takeIf { it.isFile } else null
     private fun sha256(file: File): String {
         val hash = MessageDigest.getInstance("SHA-256")
         file.inputStream().use { stream ->
@@ -71,7 +74,9 @@ object Updates {
         reconcile(context)
         val prefs = preferences(context)
         check(prefs.getString("state", "") !in setOf("installing", "confirmation")) { "Предыдущее обновление ещё устанавливается." }
-        val connection = BackendClient.open(context, "/updates/manifest")
+        val source = OtaClient.source(context)
+        val open = OtaClient.connections(context)
+        val connection = open("/updates/manifest")
         val manifest = try {
             request.attach(connection)
             check(connection.responseCode == 200) { "Сервер не предоставил обновление." }
@@ -89,7 +94,7 @@ object Updates {
         val expected = manifest.get("sha256")
         require(expected is String && expected.matches(Regex("[a-f0-9]{64}")))
         val artifact = File(context.cacheDir, "ota-${UUID.randomUUID()}.apk")
-        val download = BackendClient.open(context, "/updates/$name")
+        val download = open("/updates/$name")
         try {
             request.attach(download)
             check(download.responseCode == 200) { "Не удалось скачать APK." }
@@ -100,18 +105,21 @@ object Updates {
             check(sha256(artifact) == expected) { "Контрольная сумма APK не совпала." }
             verifiedCandidate(context, artifact, version)
             request.ensureActive()
+            check(source == OtaClient.source(context)) { "Сервер обновлений изменился. Проверьте обновление заново." }
             val old = cached(context)
             check(prefs.edit().putString("file", artifact.name).putString("hash", expected).putLong("version", version)
-                .putString("state", "ready").putString("message", "Версия $version скачана и проверена.").commit())
+                .putString("source", source).putString("state", "ready").putString("message", "Версия $version скачана и проверена.").commit())
             old?.delete()
             return artifact
         } catch (error: Exception) { artifact.delete(); throw error }
         finally { request.detach(); download.disconnect() }
     }
-    @Synchronized fun install(context: Context, file: File) {
+    @Synchronized fun install(context: Context, file: File, requireIdle: Boolean = false, ensureActive: () -> Unit = {}) {
+        ensureActive()
         val prefs = preferences(context)
         check(prefs.getString("state", "") == "ready" && file.canonicalFile == cached(context)?.canonicalFile) { "Сначала скачайте и проверьте обновление." }
         check(context.packageManager.canRequestPackageInstalls()) { "Разрешите установку обновлений для этого приложения." }
+        check(prefs.getString("source", OtaClient.source(context)) == OtaClient.source(context)) { "Сервер обновлений изменился. Проверьте обновление заново." }
         val version = prefs.getLong("version", 0)
         check(sha256(file) == prefs.getString("hash", "")) { "Скачанный APK изменился." }
         verifiedCandidate(context, file, version)
@@ -126,11 +134,17 @@ object Updates {
         val token = UUID.randomUUID().toString()
         try {
             installer.openSession(id).use { session ->
-                session.openWrite("base.apk", 0, file.length()).use { output -> file.inputStream().use { it.copyTo(output) }; session.fsync(output) }
+                session.openWrite("base.apk", 0, file.length()).use { output ->
+                    file.inputStream().use { UpdateDownload.copy(it, output, ensureActive) }; session.fsync(output)
+                }
                 check(prefs.edit().putInt("session", id).putString("callback", token).putString("state", "installing")
                     .putString("message", "APK проверен. Ожидаю результат системного установщика.").commit())
                 val callback = PendingIntent.getBroadcast(context, id,
                     Intent(context, InstallResult::class.java).putExtra("callback", token), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
+                check(!requireIdle || AutoUpdates.idle(context)) { "Ассистент занят. Установка отложена." }
+                check(!requireIdle || OtaClient.enabled(context)) { "Автообновление выключено." }
+                check(prefs.getString("source", OtaClient.source(context)) == OtaClient.source(context)) { "Подключение OTA изменилось." }
+                ensureActive()
                 session.commit(callback.intentSender)
             }
         } catch (error: Exception) {
@@ -173,6 +187,9 @@ class InstallResult : BroadcastReceiver() {
 }
 class UpdateReplaced : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) Updates.reconcile(context)
+        if (intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) {
+            Updates.reconcile(context)
+            runCatching { AutoUpdates.schedule(context) }
+        }
     }
 }

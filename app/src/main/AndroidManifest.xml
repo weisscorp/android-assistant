@@ -47,6 +47,8 @@
         </intent-filter></receiver>
         <activity android:name=".HomeInboxActivity" android:exported="false" android:theme="@style/Theme.Assistant.Console" />
         <service android:name=".HomeLinkJob" android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service android:name=".AutoUpdateJob" android:exported="false" android:permission="android.permission.BIND_JOB_SERVICE" />
+        <receiver android:name=".AutoUpdateBoot" android:exported="false"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter></receiver>
         <activity android:name=".ModelCatalogActivity" android:exported="false" />
         <activity android:name=".SettingsActivity" android:exported="false" android:theme="@style/Theme.Assistant.Console" />
         <activity android:name=".SourcesActivity" android:exported="true" android:theme="@style/Theme.Assistant.Console">

@@ -46,7 +46,8 @@ object BackendClient {
     }
     fun endpoint(context: Context) = context.getSharedPreferences("settings", 0).getString("backend", "") ?: ""
     fun certificateFingerprint(context: Context) = context.getSharedPreferences("settings", 0).getString("backend_certificate", "") ?: ""
-    fun open(context: Context, path: String): HttpsURLConnection {
+    fun open(context: Context, path: String): HttpsURLConnection = connections(context)(path)
+    internal fun connections(context: Context): (String) -> HttpsURLConnection {
         // One preferences snapshot binds endpoint, identity and credential to
         // the same saved configuration while settings change concurrently.
         val settings = context.getSharedPreferences("settings", 0).all
@@ -55,11 +56,11 @@ object BackendClient {
         val encrypted = settings["token"] as? String ?: error("Настройте токен сервера.")
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, Base64.decode(settings["token_iv"] as? String ?: "", Base64.NO_WRAP))) }
         val token = cipher.doFinal(Base64.decode(encrypted, Base64.NO_WRAP)).toString(Charsets.UTF_8)
-        return (URL(endpoint + path).openConnection() as HttpsURLConnection).apply {
+        return { path -> (URL(endpoint + path).openConnection() as HttpsURLConnection).apply {
             BackendTls.configure(this, settings["backend_certificate"] as? String ?: "")
             connectTimeout = 8_000; readTimeout = 30_000; instanceFollowRedirects = false
             setRequestProperty("Authorization", "Bearer $token")
-        }
+        } }
     }
     class Request {
         internal val trace = InteractionJournal.current

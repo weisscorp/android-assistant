@@ -8,9 +8,16 @@ import android.os.Bundle
 class AssistantApplication : Application(), Application.ActivityLifecycleCallbacks {
     companion object { @Volatile internal var foreground = false; private set }
     private var resumed = 0
-    override fun onCreate() { super.onCreate(); registerActivityLifecycleCallbacks(this) }
+    override fun onCreate() {
+        super.onCreate(); registerActivityLifecycleCallbacks(this)
+        OtaClient.consumeBootstrap(this)
+        runCatching { AutoUpdates.schedule(this) }
+    }
     override fun onActivityResumed(activity: Activity) { resumed++; foreground = true }
-    override fun onActivityPaused(activity: Activity) { resumed = maxOf(0, resumed - 1); foreground = resumed > 0 }
+    override fun onActivityPaused(activity: Activity) {
+        resumed = maxOf(0, resumed - 1); foreground = resumed > 0
+        if (!foreground) runCatching { AutoUpdates.schedule(this, immediate = true) }
+    }
     override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit
     override fun onActivityStarted(activity: Activity) = Unit
     override fun onActivityStopped(activity: Activity) = Unit

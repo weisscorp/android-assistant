@@ -438,7 +438,36 @@ class SettingsActivity : Activity() {
             })
             label("Важные события могут всплывать поверх приложений, если Android разрешает. Все каналы создаются без звука и вибрации. Для озвучки: «прочитай сообщения от Гермеса» или «прочитай». Сообщение об обновлении не запускает установку. Источники Slack и почты подключаются на домашнем сервере.")
         }
-        group("Обновления приложения", "Версия, SHA-256 и подпись проверяются до установки.") {
+        group("Dev OTA", "Отдельное подключение для автоматических обновлений. Версия, SHA-256 и подпись проверяются до установки.") {
+            fun field(title: String, value: String, secret: Boolean = false): EditText {
+                label(title)
+                return EditText(this).apply {
+                    setSingleLine(); setText(value); setTextColor(palette.text); setHintTextColor(palette.secondary)
+                    inputType = InputType.TYPE_CLASS_TEXT or if (secret) InputType.TYPE_TEXT_VARIATION_PASSWORD else InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                    content.addView(this, LinearLayout.LayoutParams(-1, -2))
+                }
+            }
+            val endpoint = field("HTTPS-адрес dev OTA", OtaClient.endpoint(this)).apply { hint = "https://192.168.1.2:8779" }
+            val token = field("Ключ доступа (пустое поле сохраняет текущий)", "", secret = true)
+            val certificate = field("SHA-256 сертификата для локального IP", OtaClient.fingerprint(this))
+            val automatic = Switch(this).apply {
+                text = "Автоматически скачивать и устанавливать dev-версии"; setTextColor(palette.text)
+                isChecked = OtaClient.enabled(this@SettingsActivity); content.addView(this)
+            }
+            button("Сохранить dev OTA") {
+                runCatching { OtaClient.save(this, endpoint.text.toString(), token.text.toString(), certificate.text.toString(), automatic.isChecked) }
+                    .onSuccess { token.text.clear(); status.text = if (automatic.isChecked) "Dev OTA включён. Проверю при свободном ассистенте и Wi-Fi." else "Подключение сохранено. Автообновления выключены." }
+                    .onFailure { status.text = it.message ?: "Не удалось сохранить dev OTA." }
+            }
+            button("Импортировать настройки dev OTA") {
+                startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    type = "application/json"; addCategory(Intent.CATEGORY_OPENABLE)
+                }, 23)
+            }
+            label("Фоновая проверка — примерно раз в 15 минут при доступной безлимитной сети; Android может задерживать задания во сне. Установка ждёт окончания работы ассистента и звонков. Звуки и микрофон при обновлении не включаются. Один раз разрешите установку приложений в разделе «Доступы». Если Android требует подтверждения, появится тихое уведомление.")
+            button("Статус dev OTA") { status.text = AutoUpdates.status(this) + "\n" + Updates.message(this) }
+        }
+        group("Обновления приложения", "Используется dev OTA, если он задан; иначе домашний сервер.") {
         button("Проверить и установить OTA") {
             VoiceConversation.stopActive(); conversation = null
             status.text = "Проверяю обновления на домашнем сервере…"
@@ -626,6 +655,17 @@ class SettingsActivity : Activity() {
     @Deprecated("Platform result callback")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 23 && resultCode == RESULT_OK) {
+            val uri = data?.data ?: return
+            val result = runCatching {
+                val bytes = contentResolver.openInputStream(uri)?.use { it.readNBytes(4097) } ?: error("Не удалось открыть настройки.")
+                require(bytes.size <= 4096) { "Файл настроек слишком большой." }
+                val json = org.json.JSONObject(bytes.toString(Charsets.UTF_8))
+                OtaClient.save(this, json.getString("endpoint"), json.getString("token"), json.optString("certificateSha256"), json.optBoolean("automatic", false))
+            }
+            result.onSuccess { recreate() }.onFailure { status.text = it.message ?: "Не удалось импортировать dev OTA." }
+            return
+        }
         if (requestCode == 22 && resultCode == RESULT_OK) {
             val uri = data?.data ?: return
             status.text = "Сохраняю журнал…"

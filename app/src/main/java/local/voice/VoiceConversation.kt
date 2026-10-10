@@ -29,7 +29,7 @@ class VoiceConversation internal constructor(
     private val weatherSource: WeatherDataSource = OpenMeteo
 ) {
     companion object {
-        private var activeConversation: VoiceConversation? = null
+        @Volatile private var activeConversation: VoiceConversation? = null
         internal val activePhase: Phase? get() = activeConversation?.diagnostics?.phase
         internal val activeSpeechLevel: Int get() = activeConversation?.speechLevel ?: 0
         fun finishActiveUtterance() { activeConversation?.finishUtterance() }

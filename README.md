@@ -6,6 +6,9 @@ on-device speech, local GGUF models and an optional connection to
 
 [Русский](README.ru.md) · [Build guide](docs/build.md) · [Hub connection](docs/hub.md)
 
+Optional [development OTA](docs/dev-ota.md) publishes checked owner commits through
+an authenticated HTTPS channel and supports quiet, owner-enabled self-updates.
+
 ## Included source
 
 - Android system assistant entry points and headset-button lifecycle; text input

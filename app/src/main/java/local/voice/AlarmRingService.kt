@@ -19,6 +19,7 @@ class AlarmRingService : Service() {
     private val timeout=Runnable { finishRing() }
     companion object {
         @Volatile private var active: AlarmRingService? = null
+        internal val ringing: Boolean get() = active != null
         fun dismiss(context: Context, id: Long) { active?.let { if(it.id==id) it.handler.post { it.finishRing() } } }
     }
     override fun onBind(intent: Intent?): IBinder? = null
