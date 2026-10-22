@@ -80,12 +80,14 @@ object HomeLink {
                 }
                 val (code, json) = BackendClient.link(context, "POST", "/link/$device/knowledge", snapshot.toString().toByteArray(), operation)
                 if (code == 409) prefs(context).edit().putLong("revision_floor", json.getLong("revision") + 1).commit()
-                check(code == 200 && json.getLong("revision") == revision) { "Knowledge sync failed" }
+                check(code == 200 && json.getLong("revision") == revision) { "Knowledge sync failed (HTTP $code, revision ${json.optLong("revision", -1)}; expected $revision)" }
                 synchronized(this) {
                     operation.ensureActive(); check(device == device(context))
                     prefs(context).edit().putLong("synced_revision", revision).putStringSet("uploaded_images", images.keys.toSet()).putLong("synced_at", System.currentTimeMillis()).commit()
                 }
             }
+            val audioResult = runCatching { syncAudioNotes(context, device, operation) }
+            val speechResult = runCatching { syncSpeechDataset(context,device,operation) }
             operation.ensureActive()
             val unlocked = !context.getSystemService(android.app.KeyguardManager::class.java).isDeviceLocked
             val activity = unlocked && (AssistantApplication.foreground || VoiceConversation.activePhase?.let { it != SessionDiagnostics.Phase.STOPPED } == true)
@@ -107,8 +109,57 @@ object HomeLink {
             HomeEvents(context).flush(device, operation)
             val (ack, _) = BackendClient.link(context, "POST", "/link/$device/ack", JSONObject().put("through", inbox.cursor(device)).toString().toByteArray(), operation)
             check(ack == 200) { "Ack failed" }
-            synchronized(this) { operation.ensureActive(); check(device == device(context)); prefs(context).edit().putString("status", "Знания синхронизированы. Сообщения получены.").putLong("checked_at", System.currentTimeMillis()).apply() }
+            audioResult.getOrThrow()
+            speechResult.getOrThrow()
+            synchronized(this) { operation.ensureActive(); check(device == device(context)); prefs(context).edit().putString("status", "Знания и аудиозаметки синхронизированы. Сообщения получены.").putLong("checked_at", System.currentTimeMillis()).apply() }
         } finally { if (request === operation) request = null }
+    }
+    private fun syncSpeechDataset(context: Context,device: String,operation: BackendClient.Request) {
+        val store=SpeechDataset(context);val owner=AudioNotes(context).owner()
+        for(sample in store.outgoing()) {
+            val id=sample.getString("id");val revision=sample.getLong("revision")
+            if(prefs(context).getLong("speech_sample_$id",0)>=revision)continue
+            if(!sample.getBoolean("deleted"))for(clean in listOf(false,true)) {
+                val sha=sample.getString(if(clean)"cleanSha256" else "rawSha256")
+                if(!prefs(context).getBoolean("speech_blob_$sha",false)) {
+                    val(code,_)=BackendClient.link(context,"POST","/link/$owner/speech-audio/$sha",store.audio(id,clean).readBytes(),operation)
+                    check(code==200){"Speech audio sync failed"}
+                    synchronized(this) {operation.ensureActive();check(device==device(context));prefs(context).edit().putBoolean("speech_blob_$sha",true).commit()}
+                }
+            }
+            val(code,result)=BackendClient.link(context,"POST","/link/$owner/speech-samples",sample.toString().toByteArray(),operation)
+            if(code==404) {prefs(context).edit().remove("speech_blob_${sample.getString("rawSha256")}").remove("speech_blob_${sample.getString("cleanSha256")}").commit()}
+            check(code==200 && result.getLong("revision")>=revision){"Speech sample sync failed"}
+            synchronized(this) {operation.ensureActive();check(device==device(context));prefs(context).edit().putLong("speech_sample_$id",revision).commit()}
+        }
+    }
+    private fun syncAudioNotes(context: Context, device: String, operation: BackendClient.Request) {
+        val store = AudioNotes(context)
+        val owner = store.owner()
+        for (note in store.local().filter { it.getString("audioSha256").isNotBlank() }) {
+            val id = note.getString("id"); val revision = note.getLong("revision")
+            if (prefs(context).getLong("audio_note_$id", 0) >= revision) continue
+            val sha = note.getString("audioSha256")
+            if (!prefs(context).getBoolean("audio_blob_$sha", false)) {
+                val (code, _) = BackendClient.link(context, "POST", "/link/$owner/audio/$sha", store.audio(id).readBytes(), operation)
+                check(code == 200) { "Audio upload failed" }
+                synchronized(this) { operation.ensureActive(); check(device == device(context)); prefs(context).edit().putBoolean("audio_blob_$sha", true).commit() }
+            }
+            val (code, result) = BackendClient.link(context, "POST", "/link/$owner/audio-notes", note.toString().toByteArray(), operation)
+            check(code == 200 && result.getLong("revision") >= revision) { "Audio note sync failed" }
+            synchronized(this) { operation.ensureActive(); check(device == device(context)); prefs(context).edit().putLong("audio_note_$id", revision).commit() }
+        }
+        val notes = org.json.JSONArray(); var offset = 0
+        do {
+            val (code, page) = BackendClient.link(context, "GET", "/link/$device/audio-notes?offset=$offset", null, operation)
+            // An older Hub remains usable until its audio-notes API is deployed.
+            if (code == 404 && store.local().isEmpty()) return
+            check(code == 200) { "Audio notes download failed" }
+            val items = page.getJSONArray("items")
+            for (i in 0 until items.length()) notes.put(items.getJSONObject(i))
+            offset = if (page.isNull("next")) -1 else page.getInt("next")
+        } while (offset >= 0)
+        synchronized(this) { operation.ensureActive(); check(device == device(context)); store.cache(notes, device) }
     }
     internal fun checkNow(context: Context): java.util.concurrent.Future<Unit> = worker.submit<Unit> { exchange(context.applicationContext, 0) }
     internal fun poll(context: Context, done: () -> Unit) {

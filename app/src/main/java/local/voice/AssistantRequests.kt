@@ -9,7 +9,7 @@ object AssistantRequests {
         val value = raw.lowercase(Locale.ROOT).trimEnd('.', '!', '?')
         if (value in setOf("свяжи с сервером", "свяжи с гермесом", "подключи сервер", "подключи гермес", "режим сервера", "режим гермеса"))
             return VoiceCommand.BrainMode(Mode.HERMES)
-        if (value in setOf("отключи сервер", "отключи гермес", "локальный режим", "работай локально", "вернись на телефон"))
+        if (value in setOf("отключи сервер", "отключи гермес", "локальный режим", "работай локально", "вернись на телефон", "автономный режим", "работай без интернета", "работай автономно", "режим без интернета"))
             return VoiceCommand.BrainMode(Mode.LOCAL)
         if (value in setOf("автоматический режим", "выбирай автоматически")) return VoiceCommand.BrainMode(Mode.AUTO)
         if (value in setOf("возможности", "что можешь локально", "что умеешь локально", "каталог возможностей")) return VoiceCommand.Capabilities

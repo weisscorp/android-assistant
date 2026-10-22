@@ -19,11 +19,30 @@ an authenticated HTTPS channel and supports quiet, owner-enabled self-updates.
   metadata-based templates and per-model benchmark storage.
 - Device tools for supported media, contacts, app navigation/accessibility,
   screen OCR, weather, clocks/calendar and knowledge-source workflows.
+  Short current-time questions such as “сколько время”, “какое сейчас время” and
+  “подскажи который час” read the device clock directly, without LLM inference,
+  including in Hermes mode. Durations and time in other cities keep their own routes.
+- Short track-switch commands run directly; current-track questions select the reader
+  through the model and use its verified metadata without a second inference.
+  Conversational replies can start before their compact memory note finishes.
+  Decimal values are expanded into Russian fractions before synthesis, preserving display text.
+  See [response pipeline](docs/voice-response.md).
+- App opening also runs directly: “открой спотифай”, “запусти приложение Spotify”,
+  “зайди в Spotify”. Spoken Russian aliases match installed launcher labels;
+  opening does not wait for a local model or Hermes. Polite prefixes/suffixes and
+  terminal punctuation are accepted, while dictated text stays literal.
 - Saved user knowledge/aliases, share-intent ingestion, server sync and a polling inbox.
+- A private indexed application catalog with Russian resource names, generated
+  Cyrillic spellings and editable nicknames. Package events keep it current;
+  app opening reads saved knowledge instead of scanning all launchers each time.
+  See [application knowledge](docs/app-knowledge.md).
 - A bounded local interaction journal (50 MB) for request/model/tool/action analysis,
   with settings to disable, export and clear it.
-- An original native goo mascot with elastic motion, expressive eyes and listening/thinking/speaking states,
-  live audio-level reactions and an adapted Coucou tween/easing engine.
+- A pure black, monochrome interface with a white audio signal line. A 512-point FFT
+  feeds 32 frequency bands from the existing microphone PCM while listening and
+  playback-clock-aligned PCM while the assistant speaks. Silence is a flat line;
+  hidden views and reduced motion stop animation. Settings → Appearance includes
+  a silent preview. See [signal design](docs/audio-signal.md).
 
 No Google Play services are required by the included local voice pipeline. Android
 permissions, lock-screen rules and headset firmware still determine which actions
@@ -33,8 +52,8 @@ phone; emulator latency is not a phone benchmark.
 This is a development release, not a promise of reliable unrestricted app control.
 The code includes experimental tools and earlier release/update client modules.
 The launcher/CI in this repository do not install APKs or test physical devices.
-The generic animation mechanics reuse Coucou's MIT code with attribution. The
-goo character's artwork and state choreography are our own: Mochi itself has a separate
+The preserved legacy character animation mechanics reuse Coucou's MIT code with attribution.
+The earlier goo character's artwork and state choreography are our own: Mochi itself has a separate
 asset license and is not bundled. See [mascot notes](docs/mascot.md) and
 [credits and reuse boundaries](THIRD_PARTY.md).
 
@@ -72,7 +91,7 @@ server address, token or family-specific recipe is bundled as application knowle
 ## Models and speech
 
 The tracked catalog contains only metadata, not model weights. It currently includes
-LiquidAI LFM2.5, Qwen3/Qwen3.5 and Gemma options with architecture/binding validation
+LiquidAI LFM2.5, Qwen3/Qwen3.5, Gemma, experimental SmolLM 135M and TinyLlama 1.1B options with architecture/binding validation
 records and an approximately 2 GB per-entry catalog cap. The exact pins, templates,
 checksums and sizes are in `app/src/main/assets/model-catalog.json`.
 The compiled JNI fingerprint participates in compatibility checks; update validation
@@ -121,3 +140,9 @@ commands through Hub, without loading the phone LLM. See [Codex voice](docs/code
 Saving a different endpoint or credential retires that profile's pending events;
 they are never sent under the new connection. The inbox displays recent outgoing
 events and whether Hub accepted or rejected them.
+
+[Headset activation and Android 16 lifecycle](docs/headset-activation.md).
+
+[Offline voice control and setup](docs/offline-control.md).
+
+[Local speech recognition: Vosk, T-one and GigaAM v3](docs/speech-engines.md).

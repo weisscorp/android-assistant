@@ -14,7 +14,7 @@ import android.graphics.Color
 /** Only public session states: never put utterances or private replies on keyguard. */
 internal class AssistantStatusView(context: android.content.Context) : LinearLayout(context) {
     private val palette = AssistantTheme(context, cinematic = true)
-    private val core = AssistantCoreView(context).apply { speechLevel = { VoiceConversation.activeSpeechLevel } }
+    private val core = AudioSignalView(context).apply { spectrum = { VoiceConversation.activeAudioSpectrum } }
     private val message = TextView(context)
     private val helper = TextView(context)
     private val heard = TextView(context)
@@ -86,9 +86,8 @@ internal class AssistantStatusView(context: android.content.Context) : LinearLay
         if (isVisible) privacyHandler.post(privacyRefresh)
     }
     fun microphoneLevel(rms: Int, silenced: Boolean) {
-        core.microphoneLevel(rms, silenced)
         if (silenced && VoiceConversation.activePhase == SessionDiagnostics.Phase.LISTENING) {
-            core.mode = AssistantCoreView.Mode.ERROR; helper.text = "Android заглушил микрофон"
+            core.mode = AudioSignalView.Mode.ERROR; helper.text = "Android заглушил микрофон"
         }
     }
     fun transcript(text: String, final: Boolean) {
@@ -107,12 +106,12 @@ internal class AssistantStatusView(context: android.content.Context) : LinearLay
         finishRecording.isEnabled = phase == SessionDiagnostics.Phase.LISTENING && !finishingRecording
         finishRecording.alpha = if (finishRecording.isEnabled) 1f else .4f
         core.mode = when (phase) {
-            SessionDiagnostics.Phase.LISTENING -> AssistantCoreView.Mode.LISTENING
-            SessionDiagnostics.Phase.THINKING, SessionDiagnostics.Phase.CONTACTS -> AssistantCoreView.Mode.THINKING
-            SessionDiagnostics.Phase.SPEAKING -> AssistantCoreView.Mode.SPEAKING
-            SessionDiagnostics.Phase.ACTION, SessionDiagnostics.Phase.SERVER -> AssistantCoreView.Mode.WORKING
-            SessionDiagnostics.Phase.STOPPED -> AssistantCoreView.Mode.IDLE
-            else -> AssistantCoreView.Mode.LOADING
+            SessionDiagnostics.Phase.LISTENING -> AudioSignalView.Mode.LISTENING
+            SessionDiagnostics.Phase.THINKING, SessionDiagnostics.Phase.CONTACTS -> AudioSignalView.Mode.THINKING
+            SessionDiagnostics.Phase.SPEAKING -> AudioSignalView.Mode.SPEAKING
+            SessionDiagnostics.Phase.ACTION, SessionDiagnostics.Phase.SERVER -> AudioSignalView.Mode.WORKING
+            SessionDiagnostics.Phase.STOPPED -> AudioSignalView.Mode.IDLE
+            else -> AudioSignalView.Mode.LOADING
         }
         message.text = when (phase) {
             SessionDiagnostics.Phase.LISTENING -> "Слушаю вас"
@@ -137,7 +136,7 @@ internal class AssistantStatusView(context: android.content.Context) : LinearLay
         val error = text.startsWith("Гарнитура") || text.startsWith("Выбранная гарнитура") ||
             text.startsWith("Не удалось") || text.startsWith("Разрешите") || text.startsWith("Откройте приложение") ||
             text.startsWith("Звуковой канал") || text.startsWith("Речь не распознана")
-        if (error) { core.mode = AssistantCoreView.Mode.ERROR; message.text = "Нужна ваша помощь"; helper.text = text }
+        if (error) { core.mode = AudioSignalView.Mode.ERROR; message.text = "Нужна ваша помощь"; helper.text = text }
     }
 }
 
@@ -212,26 +211,26 @@ class AssistantSession(context: android.content.Context) : VoiceInteractionSessi
 class VoiceCommandActivity : Activity() {
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     private var entryGeneration = 0
+    private var pendingEntry = true
+    private var resumed = false
     private lateinit var panel: AssistantStatusView
     private val invoke = object : Runnable {
         override fun run() {
-            if (isFinishing || isDestroyed) return
+            if (isFinishing || isDestroyed || !resumed || !pendingEntry) return
+            pendingEntry = false
             if (VoiceConversation.stopActive()) { finish(); return }
-            val role = getSystemService(android.app.role.RoleManager::class.java)
-            if (role.isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT)) {
-                // This user-visible entry can start capture without waiting for a second
-                // system window/service bind. Native assist sessions keep their own entry.
-                val activity = java.lang.ref.WeakReference(this@VoiceCommandActivity)
-                val handler = main
-                val ticket = entryGeneration
-                VoiceConversation(applicationContext, { text ->
-                    AssistantHealth.message = text
-                    activity.get()?.panel?.update(text)
-                }, { handler.postDelayed({ activity.get()?.takeIf { it.entryGeneration == ticket }?.finish() }, 3000) }, releaseScreen = { activity.get()?.finish() }, transcript = { text, final -> activity.get()?.panel?.transcript(text, final) }, microphoneLevel = { rms, silenced -> activity.get()?.panel?.microphoneLevel(rms, silenced) }).start()
-            } else {
-                startActivity(Intent(this@VoiceCommandActivity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
-                finish()
-            }
+            // Explicit voice intents are user invocation even when a ROM's assistant
+            // role state changed during an OS upgrade. The resumed activity supplies
+            // microphone foreground eligibility; never redirect this entry to idle home.
+            // This user-visible entry can start capture without waiting for a second
+            // system window/service bind. Native assist sessions keep their own entry.
+            val activity = java.lang.ref.WeakReference(this@VoiceCommandActivity)
+            val handler = main
+            val ticket = entryGeneration
+            VoiceConversation(applicationContext, { text ->
+                AssistantHealth.message = text
+                activity.get()?.panel?.update(text)
+            }, { handler.postDelayed({ activity.get()?.takeIf { it.entryGeneration == ticket }?.finish() }, 3000) }, releaseScreen = { activity.get()?.finish() }, transcript = { text, final -> activity.get()?.panel?.transcript(text, final) }, microphoneLevel = { rms, silenced -> activity.get()?.panel?.microphoneLevel(rms, silenced) }).start()
         }
     }
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -240,15 +239,27 @@ class VoiceCommandActivity : Activity() {
         setTurnScreenOn(true)
         panel = AssistantStatusView(this)
         setContentView(panel)
-        window.statusBarColor = android.graphics.Color.rgb(6, 13, 22)
-        window.navigationBarColor = android.graphics.Color.rgb(6, 13, 22)
+        window.statusBarColor = android.graphics.Color.BLACK
+        window.navigationBarColor = android.graphics.Color.BLACK
         window.insetsController?.setSystemBarsAppearance(0, android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS)
-        main.post(invoke)
+    }
+    override fun onPostResume() {
+        super.onPostResume()
+        resumed = true
+        if (pendingEntry) main.post(invoke)
+    }
+    override fun onPause() {
+        resumed = false
+        main.removeCallbacks(invoke)
+        super.onPause()
     }
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         entryGeneration++
-        main.removeCallbacks(invoke); main.post(invoke)
+        pendingEntry = true
+        main.removeCallbacks(invoke)
+        if (resumed) main.post(invoke)
     }
     override fun onDestroy() { main.removeCallbacksAndMessages(null); super.onDestroy() }
 }

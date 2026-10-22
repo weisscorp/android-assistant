@@ -12,6 +12,7 @@ are not Git content; preparing a build does not relicense them.
 | llama.cpp / ggml authors | GGUF inference and Jinja templates through JNI | [MIT](licenses/llama.cpp-LICENSE), [source](https://github.com/ggml-org/llama.cpp) |
 | SpeexDSP / Xiph.Org and contributors | Echo cancellation/noise suppression | [BSD-3-Clause](licenses/speexdsp-COPYING), [source](https://github.com/xiph/speexdsp) |
 | Vosk / Alpha Cephei and contributors | Offline ASR fallback | [Apache-2.0](https://github.com/alphacep/vosk-api/blob/master/COPYING) |
+| GigaAM v3 / GigaChat Team | Optional on-device Russian RNN-T ASR, INT8 ONNX conversion by sherpa-onnx | [MIT notice](licenses/GigaAM-v3-LICENSE.txt), [upstream](https://github.com/salute-developers/GigaAM), [pinned conversion](https://huggingface.co/csukuangfj/sherpa-onnx-nemo-transducer-giga-am-v3-russian-2025-12-16/tree/0424d62637b37d8b7b1eb0f75a04d78dec55fdcc) |
 | T-one ASR / T-Software DC | Russian streaming recognition, distributed by sherpa-onnx | [Apache-2.0 notice](licenses/T-one-ASR-LICENSE.txt), [model distribution](https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models) |
 | sherpa-onnx / k2-fsa contributors | Recognition/synthesis Android JNI | [Apache-2.0](https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE) |
 | ONNX Runtime / Microsoft and contributors | Included by sherpa-onnx | [MIT](https://github.com/microsoft/onnxruntime/blob/main/LICENSE) |
@@ -52,6 +53,10 @@ publication does not distribute an APK or declare binary license clearance.
   [Qwen3.5-0.8B quantization](https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF) and
   [Qwen3.5-2B quantization](https://huggingface.co/unsloth/Qwen3.5-2B-GGUF): Apache-2.0;
   upstream Qwen and quantization authors retain credit.
+- [SmolLM-135M-Instruct / Hugging Face TB](https://huggingface.co/HuggingFaceTB/SmolLM-135M-Instruct):
+  Apache-2.0; [Q4_K_M quantization / QuantFactory](https://huggingface.co/QuantFactory/SmolLM-135M-Instruct-GGUF).
+- [TinyLlama-1.1B-Chat-v1.0 / TinyLlama](https://huggingface.co/TinyLlama/TinyLlama-1.1B-Chat-v1.0):
+  Apache-2.0; [Q4_K_M quantization / TheBloke](https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF).
 - [Gemma-3-1B-IT quantization](https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF):
   Google Gemma terms, with ggml-org quantization credit.
 
@@ -78,3 +83,7 @@ names, icons and sounds are not MIT**: see its separate
 Publication/distribution with those assets requires written author permission.
 This Android app uses its own goo design and state choreography, with no Mochi
 assets, poses, geometry, costumes or sounds. [Implementation notes](docs/mascot.md).
+
+Silero VAD (Silero Team), MIT: bundled 16 kHz voice activity model, SHA256 pinned
+in dependencies.json. Source: https://github.com/snakers4/silero-vad.
+License: licenses/Silero-VAD-LICENSE.txt (also bundled in assets/licenses).

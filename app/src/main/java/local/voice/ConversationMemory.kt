@@ -30,7 +30,7 @@ object ConversationMemory {
         if (theme.isEmpty() && moments.isEmpty()) return
         val note = JSONObject().put("topics", JSONArray(theme)).put("points", JSONArray(moments))
             .put("updatedAt", System.currentTimeMillis())
-        // Commit before playback so closing a session cannot lose its already completed note.
+        // Commit completed memory immediately; speech may already be playing.
         prefs(context).edit().putString("note", note.toString()).commit()
         HomeLink.kick(context)
     }

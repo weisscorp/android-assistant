@@ -19,6 +19,7 @@ class ToneRuntimeTest {
         val context = instrumentation.targetContext
         val prefs = context.getSharedPreferences("settings", 0)
         val old = prefs.all["tone_asr"] as? Boolean
+        val oldEngine = prefs.getString("stt_engine", null)
         val ready = Semaphore(0)
         val answers = CopyOnWriteArrayList<String>()
         var recognizer: android.speech.SpeechRecognizer? = null
@@ -46,15 +47,15 @@ class ToneRuntimeTest {
                     override fun onEvent(eventType: Int, params: android.os.Bundle) {}
                 })
             }
-            for (useTone in listOf(true, false, true)) {
+            for (engine in listOf(SpeechEngine.TONE, SpeechEngine.VOSK, SpeechEngine.GIGAAM, SpeechEngine.TONE)) {
                 ready.drainPermits(); answers.clear()
-                assertTrue(prefs.edit().putBoolean("tone_asr", useTone).commit())
+                SpeechEngines.select(context, engine)
                 instrumentation.runOnMainSync {
                     recognizer!!.startListening(Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
                         .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "ru-RU"))
                 }
                 assertTrue("System recognizer never became ready: $answers", ready.tryAcquire(30, TimeUnit.SECONDS))
-                assertEquals(if (useTone) "t-one" else "vosk", answers.single())
+                assertEquals(engine.id, answers.single())
                 assertEquals(1, audio.activeRecordingConfigurations.size)
                 instrumentation.runOnMainSync { recognizer!!.cancel() }
                 awaitReleased()
@@ -64,6 +65,7 @@ class ToneRuntimeTest {
             awaitReleased()
             val edit = prefs.edit()
             if (old == null) edit.remove("tone_asr") else edit.putBoolean("tone_asr", old)
+            if (oldEngine == null) edit.remove("stt_engine") else edit.putString("stt_engine", oldEngine)
             assertTrue(edit.commit())
         }
     }

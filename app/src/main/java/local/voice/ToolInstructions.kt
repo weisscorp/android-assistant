@@ -5,6 +5,7 @@ internal object ToolInstructions {
     data class Entry(val name: String, val instruction: String, val terms: Regex, val argument: String? = null)
     private fun entry(name: String, instruction: String, terms: String) = Entry(name, instruction, Regex(terms, RegexOption.IGNORE_CASE))
     private val entries = listOf(
+        entry("audio_notes", "audio_notes: прочитать сохранённые аудиозаметки. argument — слова для поиска или пустая строка для последних записей. Тексты заранее неизвестны, сначала вызови инструмент.", "аудио|заметк"),
         entry("time", "time: только текущее время, argument пустой. Не таймер и не будильник.", "врем|который час|сейчас час|часов"),
         entry("battery", "battery: заряд аккумулятора, argument пустой.", "заряд|батар|аккумулятор|процент"),
         entry("open", "open: открыть приложение, argument название из просьбы. Не выдумывай название.", "откр|запуст|зайди|перейди"),
@@ -55,7 +56,7 @@ internal object ToolInstructions {
             }
         }
         // Current device facts require a read first (tool_choice=required). The model gets
-        // answer capability only after execution, through answerTool's result-only prompt.
+        // a reply only after execution, using the reader's formatted metadata/result.
         val readRequired = !screenObservation && selected.any { it.name == "media" && it.argument == "info" }
         return selected + if (readRequired) emptyList() else
             listOf(Entry("answer", "answer: краткий ответ по-русски в argument. Не утверждай, что выполнил действие.", Regex("")))

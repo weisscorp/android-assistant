@@ -42,10 +42,16 @@ class ReadyCueTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val done = CountDownLatch(1)
         val error = AtomicReference<String?>("Callback never invoked")
+        val reference = PlaybackReference()
         instrumentation.runOnMainSync {
-            ReadyCue.play(instrumentation.targetContext, true, descending) { result -> error.set(result); done.countDown() }
+            ReadyCue.play(instrumentation.targetContext, true, descending, reference = reference) { result -> error.set(result); done.countDown() }
         }
         assertTrue("Readiness audio callback timed out", done.await(4, TimeUnit.SECONDS))
         assertNull(error.get())
+        val now = System.nanoTime()
+        assertTrue("Cue never reached echo cancellation reference", reference.hasRecentAudio(now))
+        val pcm = ShortArray(4800)
+        reference.frame(now - 300_000_000L, pcm)
+        assertTrue("Cue reference contained no PCM", pcm.any { it.toInt() != 0 })
     }
 }

@@ -14,6 +14,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import com.k2fsa.sherpa.onnx.OnlineRecognizer
+import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import org.vosk.Model
 import org.vosk.Recognizer
 import java.util.concurrent.Executors
@@ -27,13 +28,15 @@ class OfflineSpeech(
     private val reference: PlaybackReference = PlaybackReference(),
     private val persistent: Boolean = false,
     private val phoneMicrophone: Boolean = false,
-    private val readyCueExpected: Boolean = false,
     private val level: ((Int, Int, Boolean) -> Unit)? = null,
     private val beforeModelLoad: (() -> Unit)? = null,
-    private val fatal: ((String) -> Unit)? = null
+    private val fatal: ((String) -> Unit)? = null,
+    private val signal: ((ShortArray, Boolean) -> Unit)? = null,
+    private val interruptionOnly: Boolean = false
 ) {
     internal companion object {
         const val NO_HEADSET_AUDIO = "От микрофона гарнитуры не приходит звук. Проверьте микрофон и выполните проверку звука в настройках."
+        const val INTERRUPT_GRAMMAR = "[\"стоп\",\"замолчи\",\"отмена\",\"[unk]\"]"
     }
     private data class Request(val id: Int, val interrupt: Boolean, val headset: Boolean, val partial: (String) -> Unit, val done: (String?, String?) -> Unit)
     private val worker = Executors.newSingleThreadExecutor()
@@ -55,13 +58,16 @@ class OfflineSpeech(
         private set
     @Volatile private var closed = false
     @Volatile private var finishRequested = false
-    @Volatile private var cueUntil = 0L
-    fun muteReadyCue(milliseconds: Long = 260) { cueUntil = SystemClock.elapsedRealtime() + milliseconds }
     private var model: Model? = null
     // A setting change applies to the next instance, not half of an ongoing utterance.
-    private val useTone = context.getSharedPreferences("settings", 0).getBoolean("tone_asr", false)
-    internal val engineName: String get() = if (useTone) "t-one" else "vosk"
+    internal var lastSampleId: String? = null; private set
+    private val dataset = SpeechDataset(context)
+    private val datasetSession = dataset.session()
+    private val engine = if (interruptionOnly) SpeechEngine.VOSK else SpeechEngines.selected(context)
+    internal val engineName: String get() = engine.id
     private var tone: OnlineRecognizer? = null
+    private var giga: OfflineRecognizer? = null
+    private var vad: com.k2fsa.sherpa.onnx.Vad? = null
     private fun loadTone(): OnlineRecognizer {
         tone?.let { return it }
         return WarmSpeechModels.tone.take { ToneModels.open(context) }.also { tone = it }
@@ -76,7 +82,16 @@ class OfflineSpeech(
             if (closed) return@execute
             val error = runCatching {
                 if (!modelsReady) beforeModelLoad?.invoke()
-                if (!closed) { loadModel(); if (useTone) loadTone(); modelsReady = true }
+                if (!closed) {
+                    loadModel()
+                    when (engine) {
+                        SpeechEngine.TONE -> loadTone()
+                        SpeechEngine.GIGAAM -> if (giga == null) giga = WarmSpeechModels.giga.take { GigaAmModels.open(context) }
+                        else -> Unit
+                    }
+                    if (!interruptionOnly && vad == null) vad = speechVad(context)
+                    modelsReady = true
+                }
             }.exceptionOrNull()?.let { "Не удалось загрузить русское распознавание." }
             main.post { if (!closed) done(error) }
         }
@@ -106,6 +121,7 @@ class OfflineSpeech(
         var echo: EchoProcessor? = null
         var decoder: SpeechDecoder? = null
         var current: Request? = null
+        var sample: SpeechSampleBuffer? = null
         val pending = ArrayDeque<ShortArray>()
         var pendingSamples = 0
         val error = runCatching {
@@ -168,23 +184,24 @@ class OfflineSpeech(
                 reference.frame(nanos, play)
                 echo!!.process(pcm, play, processed)
                 // During quiet listening, stacked suppression must not erase the user's speech.
-                val clean = if (SystemClock.elapsedRealtime() < cueUntil) ShortArray(pcm.size)
-                    else if (reference.hasRecentAudio(nanos)) gate.process(processed, nanos, pcm)
+                val clean = if (reference.hasRecentAudio(nanos)) gate.process(processed, nanos, pcm)
                     else pcm
                 val active = request.get()
                 if (active !== current) {
                     decoder?.close(); decoder = null; current = active
+                    sample = if(active != null && !active.interrupt && dataset.mode() != "off") SpeechSampleBuffer() else null
                     candidate = ""; candidateSince = 0; lastPartial = 0
                     pending.clear(); pendingSamples = 0
                     inputWatchdog = if (bluetooth && active != null && !active.interrupt)
                         ZeroInputWatchdog(SystemClock.elapsedRealtime()) else null
                     if (active != null) {
                         check(!active.headset || preferred != null) { "Микрофон гарнитуры недоступен." }
-                        if (!active.interrupt && readyCueExpected) muteReadyCue()
                         until = if (active.interrupt) Long.MAX_VALUE else SystemClock.elapsedRealtime() + 15000
                         main.post { if (!closed && generation.get() == active.id) active.partial(if (active.interrupt) "Слушаю прерывание…" else "Слушаю…") }
                     }
                 }
+                signal?.invoke(if (active != null && !active.interrupt) clean else ShortArray(clean.size), recording.activeRecordingConfiguration?.isClientSilenced == true)
+                if(active != null && !active.interrupt && !finishRequested) sample?.append(pcm, clean, recording.activeRecordingConfiguration?.isClientSilenced == true)
                 if (active == null) continue // Keep AEC history, but do not decode idle PCM.
                 check(inputWatchdog?.failed(SystemClock.elapsedRealtime(), pcm,
                     recording.activeRecordingConfiguration?.isClientSilenced == true) != true) { NO_HEADSET_AUDIO }
@@ -210,10 +227,12 @@ class OfflineSpeech(
                 }
                 if (decoder == null) {
                     val localModel = model ?: error("Модель распознавания недоступна.")
-                    decoder = if (active.interrupt && phoneMicrophone) VoskDecoder(Recognizer(localModel, 16000f))
-                        else if (active.interrupt) VoskDecoder(Recognizer(localModel, 16000f, "[\"стоп\",\"замолчи\",\"отмена\",\"[unk]\"]"))
-                        else if (useTone) ToneDecoder(tone ?: error("Модель распознавания недоступна."))
+                    decoder = if (active.interrupt && phoneMicrophone && !interruptionOnly) VoskDecoder(Recognizer(localModel, 16000f))
+                        else if (active.interrupt) VoskDecoder(Recognizer(localModel, 16000f, INTERRUPT_GRAMMAR))
+                        else if (engine == SpeechEngine.TONE) ToneDecoder(tone ?: error("Модель распознавания недоступна."))
+                        else if (engine == SpeechEngine.GIGAAM) GigaAmDecoder(giga ?: error("Модель распознавания недоступна."), Recognizer(localModel, 16000f))
                         else VoskDecoder(Recognizer(localModel, 16000f))
+                    if (!active.interrupt) decoder = EndpointDecoder(decoder!!, vad ?: error("Детектор речи недоступен."))
                 }
                 // Replay the start of the utterance captured while the decoder loaded.
                 // Keep microphone reads responsive by processing at most 100ms of backlog per frame.
@@ -227,7 +246,7 @@ class OfflineSpeech(
                 }
                 val now = SystemClock.elapsedRealtime()
                 var text: String? = null
-                if (ended) text = decoder!!.result().ifBlank { null }
+                if (ended) text = decoder!!.result().let { if (active.interrupt) it.ifBlank { null } else it }
                 if (!ended && now - lastPartial > if (active.interrupt) 80 else 500) {
                     lastPartial = now
                     val phrase = decoder!!.partial()
@@ -236,11 +255,15 @@ class OfflineSpeech(
                         if (phrase in setOf("стоп", "замолчи", "отмена") && now - candidateSince >= 160) text = phrase
                     } else if (phrase.isNotEmpty()) main.post { if (!closed && generation.get() == active.id) active.partial(phrase) }
                 }
-                if ((finishRequested || now > until) && pending.isEmpty()) text = decoder!!.finish().ifBlank { null }
+                if (text == null && (finishRequested || now > until) && pending.isEmpty()) text = decoder!!.finish().ifBlank { null }
                 val deliver = if (active.interrupt) text in setOf("стоп", "замолчи", "отмена") else text != null || (pending.isEmpty() && (finishRequested || now > until))
                 if (deliver && request.compareAndSet(active, null)) {
                     val result = text
-                    main.post { if (!closed && generation.get() == active.id) active.done(result, null) }
+                    val savedSampleId = if(!active.interrupt && !result.isNullOrBlank()) runCatching {
+                        sample?.let {dataset.save(it,result,engineName,datasetSession,captureSource,inputDeviceType)}
+                    }.getOrNull() else null
+                    sample = null
+                    main.post { if (!closed && generation.get() == active.id) run { lastSampleId=savedSampleId; active.done(result, null) } }
                 }
             }
         }.exceptionOrNull()?.message
@@ -272,7 +295,12 @@ class OfflineSpeech(
         worker.execute {
             // Decoder ownership ends before models return to the idle pool. The loader may
             // still be finishing a cold load, so return them on that same serial queue.
-            modelLoader.execute { model?.let(WarmSpeechModels.vosk::put); model = null; tone?.let(WarmSpeechModels.tone::put); tone = null }
+            modelLoader.execute {
+                model?.let(WarmSpeechModels.vosk::put); model = null
+                tone?.let(WarmSpeechModels.tone::put); tone = null
+                giga?.let(WarmSpeechModels.giga::put); giga = null
+                vad?.release(); vad = null
+            }
             modelLoader.shutdown()
         }
         worker.shutdown()

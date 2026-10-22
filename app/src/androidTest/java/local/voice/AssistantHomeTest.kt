@@ -46,7 +46,7 @@ class AssistantHomeTest {
             waitFor("Typed command did not reach visible conversation") { texts(activity.window.decorView).any { it.startsWith("Сейчас") } }
             assertTrue(context.getSystemService(AudioManager::class.java).activeRecordingConfigurations.isEmpty())
             instrumentation.runOnMainSync {
-                assertEquals(AssistantCoreView.Mode.IDLE, activity.findViewById<AssistantCoreView>(R.id.assistant_core).mode)
+                assertEquals(AudioSignalView.Mode.IDLE, activity.findViewById<AudioSignalView>(R.id.assistant_core).mode)
                 assertTrue(activity.findViewById<ImageButton>(R.id.assistant_send).isEnabled)
             }
         } finally { instrumentation.runOnMainSync { activity.finish() } }
@@ -58,9 +58,9 @@ class AssistantHomeTest {
             waitFor("Microphone action did not enter listening") { activity.findViewById<Button>(R.id.assistant_mic).text == "Закончить запись" }
             assertFalse(context.getSystemService(AudioManager::class.java).activeRecordingConfigurations.isEmpty())
             instrumentation.runOnMainSync {
-                assertEquals(AssistantCoreView.Mode.LISTENING, activity.findViewById<AssistantCoreView>(R.id.assistant_core).mode)
+                assertEquals(AudioSignalView.Mode.LISTENING, activity.findViewById<AudioSignalView>(R.id.assistant_core).mode)
                 activity.findViewById<Button>(R.id.assistant_mic).performClick()
-                assertEquals(AssistantCoreView.Mode.THINKING, activity.findViewById<AssistantCoreView>(R.id.assistant_core).mode)
+                assertEquals(AudioSignalView.Mode.THINKING, activity.findViewById<AudioSignalView>(R.id.assistant_core).mode)
                 activity.findViewById<ImageButton>(R.id.assistant_stop).performClick()
             }
             waitFor("Stopping from home left microphone open") { context.getSystemService(AudioManager::class.java).activeRecordingConfigurations.isEmpty() }

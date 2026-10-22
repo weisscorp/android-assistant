@@ -37,7 +37,7 @@ internal object AutoUpdates {
     }
     internal fun idle(context: Context): Boolean {
         val audio = context.getSystemService(AudioManager::class.java)
-        return !AssistantApplication.foreground && VoiceConversation.activePhase == null && !AlarmRingService.ringing && CallGuard.inCall(context) != true &&
+        return !AssistantApplication.foreground && VoiceConversation.activePhase == null && !SpeechDatasetRecorder.recording && !AlarmRingService.ringing && CallGuard.inCall(context) != true &&
             audio.mode !in setOf(AudioManager.MODE_IN_CALL, AudioManager.MODE_IN_COMMUNICATION) &&
             audio.activeRecordingConfigurations.isEmpty()
     }

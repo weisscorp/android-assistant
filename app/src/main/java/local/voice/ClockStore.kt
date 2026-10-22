@@ -113,7 +113,7 @@ object PhoneClocks {
             if(entry.state != "pending") return
             if(remaining(context,entry)>50) { runCatching { schedule(context,entry) }; return }
             if(!store.state(id,"fired","pending")) return
-            if(entry.kind == ClockKind.ALARM) {
+            if(entry.kind == ClockKind.ALARM || entry.kind == ClockKind.TIMER) {
                 runCatching { context.startForegroundService(Intent(context,AlarmRingService::class.java).putExtra("clock_id",id)) }
                     .onFailure { notify(context,entry) }
             } else notify(context,entry)
@@ -125,20 +125,29 @@ object PhoneClocks {
             description="Только установленные вами таймеры и напоминания"
             lockscreenVisibility=Notification.VISIBILITY_PRIVATE
         })
-        manager.createNotificationChannel(NotificationChannel(RING_CHANNEL,"Будильники",NotificationManager.IMPORTANCE_HIGH).apply {
-            description="Звонок управляется ассистентом; беззвучный режим и Не беспокоить соблюдаются"
+        manager.createNotificationChannel(NotificationChannel(RING_CHANNEL,"Звонок таймеров и будильников",NotificationManager.IMPORTANCE_HIGH).apply {
+            description="Сигнал через громкость будильника; кнопка остановки и команда стоп"
             setSound(null,AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build()); enableVibration(false)
             lockscreenVisibility=Notification.VISIBILITY_PRIVATE
         })
         val label=when(entry.kind) { ClockKind.TIMER -> "Таймер завершён"; ClockKind.ALARM -> "Будильник"; else -> "Напоминание" }
-        val open=PendingIntent.getActivity(context,0,Intent(context,ClockActivity::class.java),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        return Notification.Builder(context,if(ringing) RING_CHANNEL else CHANNEL).setSmallIcon(R.drawable.ic_assistant)
+        val open=PendingIntent.getActivity(context,0,if(ringing) Intent(context,ClockRingActivity::class.java)
+            .setData(Uri.parse("assistant-clock://ring/${entry.id}")).putExtra("clock_id",entry.id)
+            else Intent(context,ClockActivity::class.java),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val builder = Notification.Builder(context,if(ringing) RING_CHANNEL else CHANNEL).setSmallIcon(R.drawable.ic_assistant)
             .setContentTitle(label).setContentText(entry.title.ifBlank { label }).setContentIntent(open).setAutoCancel(!ringing)
-            .setVisibility(Notification.VISIBILITY_PRIVATE).setCategory(if(entry.kind == ClockKind.ALARM) Notification.CATEGORY_ALARM else Notification.CATEGORY_REMINDER)
+            .setVisibility(Notification.VISIBILITY_PRIVATE).setCategory(if(ringing || entry.kind == ClockKind.ALARM) Notification.CATEGORY_ALARM else Notification.CATEGORY_REMINDER)
             .setPublicVersion(Notification.Builder(context,if(ringing) RING_CHANNEL else CHANNEL).setSmallIcon(R.drawable.ic_assistant).setContentTitle(label).build())
             .addAction(Notification.Action.Builder(null,"Остановить",pending(context,entry.id,DISMISS)).build())
-            .setDeleteIntent(pending(context,entry.id,DISMISS)).setOngoing(ringing).build()
+            .setDeleteIntent(pending(context,entry.id,DISMISS)).setOngoing(ringing).setOnlyAlertOnce(ringing)
+        if (ringing) {
+            builder.setSubText(AlarmRingService.voiceStatus)
+            if (fullScreen(context)) builder.setFullScreenIntent(open, true)
+        }
+        return builder.build()
     }
+    fun fullScreen(context: Context): Boolean = android.os.Build.VERSION.SDK_INT < 34 ||
+        context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
     internal fun notify(context: Context, entry: ClockEntry) {
         if(alerts(context)) runCatching { context.getSystemService(NotificationManager::class.java).notify("clock",entry.id.toInt(),notification(context,entry)) }
     }

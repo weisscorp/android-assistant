@@ -17,7 +17,7 @@ import local.voice.SessionDiagnostics.Phase
 /** The same conversation engine, presented as a living voice console with an ordinary text composer. */
 class MainActivity : Activity() {
     private lateinit var palette: AssistantTheme
-    private lateinit var core: AssistantCoreView
+    private lateinit var core: AudioSignalView
     private lateinit var messages: LinearLayout
     private lateinit var scroll: ScrollView
     private lateinit var state: TextView
@@ -30,7 +30,7 @@ class MainActivity : Activity() {
     private var conversation: VoiceConversation? = null
     private var textMode = false
     private var voiceBubble: TextView? = null
-    private var welcome: View? = null
+    private lateinit var notesButton: Button
     private var busy = false
     private var keyboard = false
     private val landscape get() = resources.configuration.screenWidthDp > resources.configuration.screenHeightDp
@@ -45,7 +45,6 @@ class MainActivity : Activity() {
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = AssistantBackdrop() }
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(4), 0, dp(12)) }
         val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        brand.addView(label("ВАШ ПЕРСОНАЛЬНЫЙ ИИ"))
         brand.addView(text("Ассистент", 24f, palette.text).apply { typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); setPadding(0, dp(4), 0, 0) })
         header.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(icon(R.drawable.ic_settings, "Настройки", palette.surface, palette.secondary).apply {
@@ -55,32 +54,29 @@ class MainActivity : Activity() {
             }
         }, LinearLayout.LayoutParams(dp(48), dp(48)))
         root.addView(header)
+        notesButton = Button(this).apply {
+            id = R.id.assistant_audio_notes; text = "Аудиозаметки"; isAllCaps = false
+            setTextColor(palette.text); background = palette.ripple(palette.surface, dp(18).toFloat())
+            minHeight = dp(56); textSize = 14f
+            setPadding(dp(8), 0, dp(8), 0)
+            setOnClickListener { conversation?.close(); reset(); startActivity(Intent(this@MainActivity, AudioNotesActivity::class.java)) }
+        }
         val stage = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
-        core = AssistantCoreView(this).apply { id = R.id.assistant_core; speechLevel = { VoiceConversation.activeSpeechLevel } }
+        core = AudioSignalView(this).apply { id = R.id.assistant_core; spectrum = { VoiceConversation.activeAudioSpectrum } }
         val compact = resources.configuration.screenHeightDp < 640 || resources.configuration.fontScale > 1.3f
-        stage.addView(core, LinearLayout.LayoutParams(-1, if (landscape) 0 else dp(if (compact) 136 else 224), if (landscape) 1f else 0f))
-        state = text("Готов к разговору", if (compact) 23f else 28f, palette.text).apply {
+        stage.addView(core, LinearLayout.LayoutParams(-1, if (landscape) 0 else dp(if (compact) 96 else 140), if (landscape) 1f else 0f))
+        state = text("", if (compact) 23f else 28f, palette.text).apply {
+            visibility = View.GONE
             gravity = Gravity.CENTER; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
         stage.addView(state, LinearLayout.LayoutParams(-1, -2))
-        caption = text("Нажмите микрофон или напишите сообщение", 14f, palette.secondary).apply { gravity = Gravity.CENTER; setPadding(dp(8), dp(6), dp(8), dp(12)) }
+        caption = text("", 14f, palette.secondary).apply { visibility = View.GONE; gravity = Gravity.CENTER; setPadding(dp(8), dp(6), dp(8), dp(12)) }
         stage.addView(caption, LinearLayout.LayoutParams(-1, -2))
         val chat = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         messages = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(12), 0, dp(8)) }
         scroll = ScrollView(this).apply { isFillViewport = true; isVerticalScrollBarEnabled = false; overScrollMode = View.OVER_SCROLL_NEVER; addView(messages) }
         chat.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        val intro = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.BOTTOM; setPadding(0, dp(12), 0, dp(8)) }
-        intro.addView(label("С ЧЕГО НАЧНЁМ?").apply { setPadding(0, 0, 0, dp(12)) })
-        val suggestions = LinearLayout(this)
-        listOf("Который час", "Заряд батареи").forEachIndexed { i, phrase ->
-            suggestions.addView(Button(this).apply {
-                text = phrase; textSize = 14f; isAllCaps = false; setTextColor(palette.text)
-                background = palette.ripple(palette.surface, dp(18).toFloat()); minHeight = dp(52)
-                setOnClickListener { submitText(phrase) }
-            }, LinearLayout.LayoutParams(0, -2, 1f).apply { if (i == 0) rightMargin = dp(8) })
-        }
-        intro.addView(suggestions); welcome = intro; messages.addView(intro, LinearLayout.LayoutParams(-1, -1))
         voiceDock = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(10), 0, dp(10)) }
         mic = Button(this).apply {
             id = R.id.assistant_mic; text = "Говорить"; contentDescription = "Говорить"; textSize = 17f; isAllCaps = false
@@ -96,19 +92,20 @@ class MainActivity : Activity() {
             }
         }
         voiceDock.addView(mic, LinearLayout.LayoutParams(0, -2, 1f))
+        voiceDock.addView(notesButton, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(8) })
         stop = icon(R.drawable.ic_stop, "Остановить помощника", palette.surface, palette.text).apply {
             id = R.id.assistant_stop
             setOnClickListener { VoiceConversation.stopActive(); reset() }; visibility = View.GONE
         }
         voiceDock.addView(stop, LinearLayout.LayoutParams(dp(56), dp(56)).apply { leftMargin = dp(8) })
-        val composerLabel = label("СООБЩЕНИЕ").apply { setPadding(0, dp(10), 0, dp(8)) }
+        val composerLabel = label("").apply { visibility = View.GONE; setPadding(0, dp(10), 0, dp(8)) }
         chat.addView(composerLabel)
         val composer = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL; background = palette.shape(palette.surface, dp(22).toFloat(), true)
             setPadding(dp(16), dp(4), dp(4), dp(4))
         }
         input = EditText(this).apply {
-            id = R.id.assistant_message; hint = "Напишите мне…"; setTextColor(palette.text); setHintTextColor(palette.secondary)
+            id = R.id.assistant_message; hint = "Напишите мне…"; contentDescription = "Сообщение ассистенту"; setTextColor(palette.text); setHintTextColor(palette.secondary)
             textSize = 16f; background = null; minHeight = dp(48); maxLines = 3
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             imeOptions = EditorInfo.IME_ACTION_SEND or EditorInfo.IME_FLAG_NO_EXTRACT_UI
@@ -140,8 +137,6 @@ class MainActivity : Activity() {
             keyboard = insets.isVisible(WindowInsets.Type.ime())
             view.setPadding(dp(gutter) + bars.left, bars.top + dp(8), dp(gutter) + bars.right, maxOf(bars.bottom, ime.bottom) + dp(12))
             header.visibility = if (keyboard) View.GONE else View.VISIBLE
-            caption.visibility = if (keyboard) View.GONE else View.VISIBLE
-            welcome?.visibility = if (keyboard) View.GONE else View.VISIBLE
             if (!landscape) core.visibility = if (keyboard) View.GONE else View.VISIBLE
             voiceDock.visibility = if (keyboard && (conversation == null || textMode)) View.GONE else View.VISIBLE
             insets
@@ -150,10 +145,10 @@ class MainActivity : Activity() {
         window.insetsController?.setSystemBarsAppearance(0, android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS)
         root.viewTreeObserver.addOnGlobalLayoutListener {
             if (!landscape && !keyboard) {
-                val available = root.height - root.paddingTop - root.paddingBottom - header.height - state.height - caption.height -
+                val available = root.height - root.paddingTop - root.paddingBottom - header.height - (if (state.visibility == View.VISIBLE) state.height else 0) - (if (caption.visibility == View.VISIBLE) caption.height else 0) -
                     voiceDock.height - composerLabel.height - composer.height
-                val chatReserve = if (resources.configuration.screenHeightDp < 560) 0 else dp(if (welcome == null) 120 else 72)
-                val maximum = dp(if (compact) 136 else if (welcome == null) 156 else 224)
+                val chatReserve = if (resources.configuration.screenHeightDp < 560) 0 else dp(120)
+                val maximum = dp(if (compact) 96 else 140)
                 val height = (available - chatReserve).coerceIn(0, maximum)
                 val visibility = if (height >= dp(48)) View.VISIBLE else View.GONE
                 if (core.visibility != visibility) core.visibility = visibility
@@ -171,7 +166,6 @@ class MainActivity : Activity() {
         background = palette.ripple(color, dp(18).toFloat()); setPadding(dp(13), dp(13), dp(13), dp(13))
     }
     private fun bubble(value: String, own: Boolean): TextView {
-        welcome?.let { messages.removeView(it); welcome = null }
         if (!landscape && core.layoutParams.height > dp(156)) {
             core.layoutParams = core.layoutParams.apply { height = dp(156) }
         }
@@ -196,44 +190,38 @@ class MainActivity : Activity() {
             stop.visibility = if (!typed || busy) View.VISIBLE else View.GONE
             mic.text = if (!typed) { if (phase == Phase.LISTENING) "Закончить запись" else "Остановить" } else "Говорить"
             mic.contentDescription = mic.text; mic.setMicIcon(!typed)
+            notesButton.visibility = if (typed) View.VISIBLE else View.GONE
             if (status == "Слушаю…") voiceBubble = null
         }, { reset() }, transcript = { words, _ ->
             if (voiceBubble == null) voiceBubble = bubble(words, true) else voiceBubble?.text = words
+        }, speechSample = { id, words ->
+            val target=voiceBubble
+            val row=target?.parent as? LinearLayout
+            row?.addView(Button(this).apply {
+                text="Исправить распознавание";isAllCaps=false;setTextColor(palette.text);minHeight=dp(48)
+                background=palette.ripple(palette.surface,0f)
+                setOnClickListener { SpeechDatasetActivity.correct(this@MainActivity,id) { corrected -> target?.takeIf {it.parent===row}?.text=corrected } }
+            })
         }, textOnly = typed, replyObserver = { reply -> bubble(reply, false) }, microphoneLevel = { rms, silenced ->
-            core.microphoneLevel(rms, silenced)
-            if (VoiceConversation.activePhase == Phase.LISTENING) {
-                core.mode = if (silenced) AssistantCoreView.Mode.ERROR else AssistantCoreView.Mode.LISTENING
-                if (silenced) caption.text = "Android заглушил микрофон. Проверьте разрешения."
+                if (VoiceConversation.activePhase == Phase.LISTENING) {
+                core.mode = if (silenced) AudioSignalView.Mode.ERROR else AudioSignalView.Mode.LISTENING
+                if (silenced) { caption.text = "Android заглушил микрофон. Проверьте разрешения."; caption.visibility = View.VISIBLE }
             }
         }).also { conversation = it; it.start() }
     }
     private fun renderState(phase: Phase?, status: String, typed: Boolean) {
         core.mode = when (phase) {
-            Phase.LISTENING -> if (typed) AssistantCoreView.Mode.IDLE else AssistantCoreView.Mode.LISTENING
-            Phase.THINKING, Phase.CONTACTS -> AssistantCoreView.Mode.THINKING
-            Phase.SPEAKING -> if (typed) AssistantCoreView.Mode.THINKING else AssistantCoreView.Mode.SPEAKING
-            Phase.ACTION, Phase.SERVER -> AssistantCoreView.Mode.WORKING
-            Phase.STARTING, Phase.ROUTING, Phase.LOADING -> AssistantCoreView.Mode.LOADING
-            else -> AssistantCoreView.Mode.IDLE
+            Phase.LISTENING -> if (typed) AudioSignalView.Mode.IDLE else AudioSignalView.Mode.LISTENING
+            Phase.THINKING, Phase.CONTACTS -> AudioSignalView.Mode.THINKING
+            Phase.SPEAKING -> if (typed) AudioSignalView.Mode.THINKING else AudioSignalView.Mode.SPEAKING
+            Phase.ACTION, Phase.SERVER -> AudioSignalView.Mode.WORKING
+            Phase.STARTING, Phase.ROUTING, Phase.LOADING -> AudioSignalView.Mode.LOADING
+            else -> AudioSignalView.Mode.IDLE
         }
-        state.text = when (phase) {
-            Phase.LISTENING -> if (typed) "Я на связи" else "Слушаю вас"
-            Phase.THINKING -> "Думаю"
-            Phase.SPEAKING -> if (typed) "Готовлю ответ" else "Говорю"
-            Phase.CONTACTS -> "Ищу контакт"
-            Phase.ACTION -> "Выполняю"
-            Phase.SERVER -> "Hermes выполняет задачу"
-            Phase.STARTING, Phase.ROUTING, Phase.LOADING -> "Подключаюсь"
-            else -> "Разговор завершён"
-        }
-        caption.text = when (phase) {
-            Phase.LISTENING -> if (typed) "Можно написать ещё" else "Говорите. Я слушаю."
-            Phase.THINKING -> "Обдумываю ваш запрос"
-            Phase.SPEAKING -> if (typed) "Формулирую ответ" else "Можно прервать кнопкой остановки"
-            else -> status
-        }
+        state.visibility = View.GONE; caption.visibility = View.GONE
         if (status.startsWith("Не удалось") || status.startsWith("Разрешите") || status.startsWith("Откройте приложение") || status.startsWith("Речь не распознана")) {
-            core.mode = AssistantCoreView.Mode.ERROR; state.text = "Нужна ваша помощь"; caption.text = status
+            core.mode = AudioSignalView.Mode.ERROR; state.text = "Нужна ваша помощь"; caption.text = status
+            state.visibility = View.VISIBLE; caption.visibility = View.VISIBLE
         }
     }
     private fun beginVoice() {
@@ -252,10 +240,10 @@ class MainActivity : Activity() {
     }
     private fun reset() {
         conversation = null; busy = false
-        core.mode = if (state.text == "Нужна ваша помощь") AssistantCoreView.Mode.ERROR else AssistantCoreView.Mode.IDLE
-        core.microphoneLevel(0, false)
+        core.mode = if (state.text == "Нужна ваша помощь") AudioSignalView.Mode.ERROR else AudioSignalView.Mode.IDLE
         // Preserve a visible failure until the next interaction instead of erasing it on close.
-        if (state.text != "Нужна ваша помощь") { state.text = "Готов к разговору"; caption.text = "Нажмите микрофон или напишите сообщение" }
+        if (state.text != "Нужна ваша помощь") { state.text = ""; caption.text = ""; state.visibility = View.GONE; caption.visibility = View.GONE }
+        notesButton.visibility = View.VISIBLE
         send.isEnabled = true; send.alpha = 1f; stop.visibility = View.GONE
         mic.text = "Говорить"; mic.contentDescription = "Говорить"; mic.setMicIcon(false)
         voiceDock.visibility = if (keyboard) View.GONE else View.VISIBLE
@@ -263,7 +251,7 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(code: Int, permissions: Array<out String>, results: IntArray) {
         super.onRequestPermissionsResult(code, permissions, results)
         if (code == 100 && checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) beginVoice()
-        else { state.text = "Нужен доступ к микрофону"; caption.text = "Для голоса разрешите микрофон. Можно написать сообщение."; core.mode = AssistantCoreView.Mode.ERROR }
+        else { state.visibility = View.VISIBLE; caption.visibility = View.VISIBLE; state.text = "Нужен доступ к микрофону"; caption.text = "Для голоса разрешите микрофон. Можно написать сообщение."; core.mode = AudioSignalView.Mode.ERROR }
     }
     // The foreground audio service owns capture while another app or keyguard covers this UI.
     // Explicit exit/settings and destruction still release this Activity's conversation.

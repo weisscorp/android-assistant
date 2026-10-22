@@ -72,6 +72,7 @@ class SettingsMenuTest {
                 "Доступы" to "Разрешить микрофон и Bluetooth",
                 "Модели" to "Каталог моделей и benchmark",
                 "Аудиоустройства" to "Выбрать гарнитуру",
+                "Оформление" to "Показать пример без звука",
                 "Проверки" to "Проверить звук гарнитуры",
                 "Поведение и память" to "Предпочитаемый навигатор",
                 "Hermes и обновления" to "Сохранить подключение")
@@ -93,11 +94,14 @@ class SettingsMenuTest {
             assertNoAudio()
         } finally { instrumentation.runOnMainSync { home.finish() } }
     }
-    @Test fun changingSpeechModelSurvivesRecreationAndMenuNavigation() {
+    @Test fun changingSpeechModelSurvivesRecreationAndMenuNavigation() = checkSpeechChoice(SpeechEngine.VOSK)
+    @Test fun gigaAmIsThirdChoiceAndSurvivesRecreation() = checkSpeechChoice(SpeechEngine.GIGAAM)
+    private fun checkSpeechChoice(target: SpeechEngine) {
         val prefs = context.getSharedPreferences("settings", 0)
         val hadPreference = prefs.contains("tone_asr")
         val previous = prefs.getBoolean("tone_asr", false)
-        prefs.edit().putBoolean("tone_asr", true).commit()
+        val previousEngine = prefs.getString("stt_engine", null)
+        prefs.edit().remove("stt_engine").putBoolean("tone_asr", true).commit()
         val home = launch()
         var screen: SettingsActivity? = null
         try {
@@ -108,7 +112,7 @@ class SettingsMenuTest {
             waitFor("Speech model dialog did not accept selection") {
                 instrumentation.uiAutomation.windows.any { window -> window.root?.let { root ->
                     try {
-                        val items = root.findAccessibilityNodeInfosByText("Vosk · компактная русская модель")
+                        val items = root.findAccessibilityNodeInfosByText("${target.label} · ${target.description}")
                         try {
                             items.singleOrNull()?.let { item ->
                                 // The native choice row is handled by its ListView and
@@ -129,21 +133,22 @@ class SettingsMenuTest {
                     } finally { root.recycle() }
                 } == true }
             }
-            waitFor("Speech model was not saved") { !prefs.getBoolean("tone_asr", true) }
+            waitFor("Speech model was not saved") { SpeechEngines.selected(context) == target }
             val before = screen!!
             instrumentation.runOnMainSync { before.recreate() }
             waitFor("Models screen did not restore after recreation") { current()?.let { it !== before && it.intent.getStringExtra(SettingsActivity.EXTRA_SECTION) == SettingsSection.MODELS.name } == true }
             screen = current()!!
-            instrumentation.runOnMainSync { assertTrue(texts(screen!!).contains("Распознавание: Vosk")); screen!!.findViewById<Button>(R.id.settings_back).performClick() }
+            instrumentation.runOnMainSync { assertTrue(texts(screen!!).contains("Распознавание: ${target.label}")); screen!!.findViewById<Button>(R.id.settings_back).performClick() }
             waitFor("Recreated page did not return to menu") { current() === home }
             screen = null
             click(home, "Модели")
             waitFor("Models screen did not reopen") { current()?.intent?.getStringExtra(SettingsActivity.EXTRA_SECTION) == SettingsSection.MODELS.name }
             screen = current()!!
-            instrumentation.runOnMainSync { assertTrue(texts(screen!!).contains("Распознавание: Vosk")) }
+            instrumentation.runOnMainSync { assertTrue(texts(screen!!).contains("Распознавание: ${target.label}")) }
             assertNoAudio()
         } finally {
             instrumentation.runOnMainSync { screen?.finish(); home.finish() }
+            prefs.edit().apply { if (previousEngine == null) remove("stt_engine") else putString("stt_engine", previousEngine) }.commit()
             if (hadPreference) prefs.edit().putBoolean("tone_asr", previous).commit() else prefs.edit().remove("tone_asr").commit()
         }
     }

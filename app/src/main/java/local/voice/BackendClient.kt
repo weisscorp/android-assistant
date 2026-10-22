@@ -105,8 +105,8 @@ object BackendClient {
     }
     internal fun link(context: Context, method: String, path: String, body: ByteArray?, request: Request): Pair<Int, JSONObject> {
         require(method in setOf("POST", "GET"))
-        require(path.matches(Regex("/link/[0-9a-f-]{36}/(?:knowledge|ack|presence|receipt|image/[0-9a-f]{64}|events(?:\\?after=[0-9]+&wait=[0-9]+)?)")))
-        require(body == null || body.size <= if ("/image/" in path) 10_485_760 else 4_194_304)
+        require(path.matches(Regex("/link/[0-9a-f-]{36}/(?:knowledge|ack|presence|receipt|image/[0-9a-f]{64}|audio/[0-9a-f]{64}|speech-audio/[0-9a-f]{64}|speech-samples(?:\\?offset=[0-9]+)?|audio-notes(?:\\?offset=[0-9]+)?|events(?:\\?after=[0-9]+&wait=[0-9]+)?)")))
+        require(body == null || body.size <= if ("/speech-audio/" in path || "/audio/" in path) 20_971_520 else if ("/image/" in path) 10_485_760 else 4_194_304)
         request.ensureActive()
         val connection = open(context, path)
         try {
@@ -115,7 +115,7 @@ object BackendClient {
             connection.readTimeout = 30_000
             if (body != null) {
                 connection.doOutput = true; connection.setFixedLengthStreamingMode(body.size)
-                connection.setRequestProperty("Content-Type", if ("/image/" in path) "application/octet-stream" else "application/json; charset=utf-8")
+                connection.setRequestProperty("Content-Type", if ("/speech-audio/" in path || "/audio/" in path || "/image/" in path) "application/octet-stream" else "application/json; charset=utf-8")
                 connection.outputStream.use { it.write(body) }
             }
             val code = connection.responseCode

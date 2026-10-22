@@ -15,6 +15,7 @@ internal enum class SettingsSection(val title: String, val subtitle: String, val
     ACCESS("Доступы", "Разрешения и управление телефоном", R.drawable.ic_settings_access),
     MODELS("Модели", "Распознавание, ответы и голос", R.drawable.ic_settings_models),
     AUDIO("Аудиоустройства", "Гарнитура, микрофон и звучание", R.drawable.ic_settings_audio),
+    APPEARANCE("Оформление", "Чёрный фон и линия аудиосигнала", R.drawable.ic_settings_appearance),
     TESTS("Проверки", "Подключение и работа помощника", R.drawable.ic_settings_tests),
     PERSONAL("Поведение и память", "Контакты, навигация и команды", R.drawable.ic_settings_personal),
     CLOCK("Время и напоминания", "Таймеры, секундомер и календарь", R.drawable.ic_settings_clock),

@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import org.vosk.Model
 import com.k2fsa.sherpa.onnx.OnlineRecognizer
+import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
@@ -42,8 +43,9 @@ internal class IdleNativeModel<T : Any>(private val retainUntilMemoryPressure: B
 internal object WarmSpeechModels {
     val vosk = IdleNativeModel<Model>(retainUntilMemoryPressure = true) { it.close() }
     val tone = IdleNativeModel<OnlineRecognizer>(retainUntilMemoryPressure = true) { it.release() }
+    val giga = IdleNativeModel<OfflineRecognizer>(retainUntilMemoryPressure = true) { it.release() }
     private val loader = Executors.newSingleThreadExecutor { task -> Thread(task, "speech-preload").apply { isDaemon = true } }
-    fun trim() { vosk.clearIdle(); tone.clearIdle() }
+    fun trim() { vosk.clearIdle(); tone.clearIdle(); giga.clearIdle() }
     fun preload(context: Context) {
         val app = context.applicationContext
         loader.execute {
@@ -52,8 +54,11 @@ internal object WarmSpeechModels {
                     val directory = AssetModels.unpack(app, "speech-ru.zip", "speech-ru", "vosk-small-ru-0.22")
                     Model(directory.absolutePath)
                 }
-                if (app.getSharedPreferences("settings", 0).getBoolean("tone_asr", false))
-                    tone.warm { ToneModels.open(app) }
+                when (SpeechEngines.selected(app)) {
+                    SpeechEngine.TONE -> tone.warm { ToneModels.open(app) }
+                    SpeechEngine.GIGAAM -> giga.warm { GigaAmModels.open(app) }
+                    else -> Unit
+                }
             }.onFailure { Log.w("WarmSpeechModels", "Preload failed; normal startup will retry", it) }
         }
     }

@@ -78,6 +78,29 @@ class InteractionJournalTest {
         assertEquals(2, records.count { it.getString("type") == "session_end" })
         assertFalse(records.any { it.getString("type").startsWith("llm_") })
     }
+    @Test fun timeParaphrasesAnswerSynchronouslyWithToolReceiptsAndNoInference() {
+        val questions = listOf("сколько время", "сколько время сейчас", "сколько сейчас времени", "какое сейчас время", "подскажи который час",
+            "скажи, пожалуйста, сколько сейчас времени?")
+        for (mode in listOf("LOCAL", "HERMES")) {
+            context.getSharedPreferences("settings", 0).edit().putString("brain_mode", mode).commit()
+            for (question in questions) {
+                instrumentation.runOnMainSync {
+                    var answer: String? = null
+                    conversation = VoiceConversation(context, {}, {}, textOnly = true, replyObserver = { answer = it })
+                        .also { it.start(); it.respond(question) }
+                    assertTrue("$mode / $question waited for inference: $answer", answer?.matches(Regex("Сейчас \\d{2}:\\d{2}\\.")) == true)
+                    assertEquals(0L, conversation!!.speechFrames)
+                    conversation!!.close("test_finished")
+                }
+            }
+        }
+        val records = events()
+        val requests = records.filter { it.getString("type") == "tool_request" }
+        assertEquals(questions.size * 2, requests.size)
+        assertTrue(requests.all { it.getJSONObject("data").getString("name") == "Time" })
+        assertFalse(records.any { it.getString("type").startsWith("llm_") })
+        assertTrue(context.getSystemService(AudioManager::class.java).activeRecordingConfigurations.isEmpty())
+    }
     @Test fun realNativeModelInputRawOutputAndMediaToolResultRemainLinked() {
         val component = PhoneNotifications.component(context)
         val hadAccess = PhoneNotifications.hasAccess(context)
@@ -94,7 +117,7 @@ class InteractionJournalTest {
             val records = events()
             val user = records.single { it.getString("type") == "user_request" }
             val input = records.filter { it.getString("type") == "llm_input" }
-            assertEquals(2, input.size)
+            assertEquals("Player facts need one tool-selection inference", 1, input.size)
             input.forEach { record ->
                 assertEquals(user.getString("session_id"), record.getString("session_id"))
                 assertEquals(user.getString("turn_id"), record.getString("turn_id"))
@@ -109,7 +132,7 @@ class InteractionJournalTest {
                 assertEquals(1, records.count { it.getString("type") == "llm_result" && it.optString("call_id") == record.getString("call_id") })
             }
             assertFalse(input.first().getJSONObject("data").getString("prompt").contains("Тестовый трек 1"))
-            assertTrue(input.last().getJSONObject("data").getString("prompt").contains("Тестовый трек 1"))
+            assertTrue(records.any { it.getString("type") == "tool_answer_formatted" && it.getJSONObject("data").getString("tool") == "media" })
             assertTrue(records.any { it.getString("type") == "tool_result" && it.getJSONObject("data").optJSONObject("observation")?.getJSONObject("data")?.optString("title") == "Тестовый трек 1" })
             assertEquals(reply, records.single { it.getString("type") == "assistant_response" }.getJSONObject("data").getString("text"))
         } finally {

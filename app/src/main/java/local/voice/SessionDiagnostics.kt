@@ -17,7 +17,7 @@ class SessionDiagnostics(private val context: Context, requireHeadset: Boolean) 
         .put("appVersionName", app.versionName).put("appVersionCode", app.longVersionCode)
         .put("startedAtEpochMs", System.currentTimeMillis())
         .put("device", "${Build.MANUFACTURER} ${Build.MODEL}").put("headsetRequired", requireHeadset)
-        .put("speechEngine", if (context.getSharedPreferences("settings", 0).getBoolean("tone_asr", false)) "t-one" else "vosk")
+        .put("speechEngine", SpeechEngines.selected(context).id)
     var phase = Phase.STARTING
         private set
     fun phase(value: Phase) {

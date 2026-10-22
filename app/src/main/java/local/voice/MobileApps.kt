@@ -98,7 +98,8 @@ class MobileApps(private val context: Context) {
     }
     private fun musicInternal(request: MusicRequest): DeviceTools.Reply {
         clear()
-        if (locked()) return DeviceTools.Reply("Для поиска исполнителя разблокируйте телефон.")
+        if (UnlockAppLaunch.locked(context) && request.play) return PackagePlayback.request(context, SPOTIFY, "Spotify", request.artist)
+        if (locked()) return DeviceTools.Reply("Для просмотра поиска исполнителя разблокируйте телефон.")
         if (!spotifyInstalled(context)) return DeviceTools.Reply("Spotify не установлен.")
         val search = Intent(Intent.ACTION_VIEW, Uri.parse("spotify:search:${Uri.encode(request.artist)}")).setPackage(SPOTIFY)
         val play = Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH).setPackage(SPOTIFY)

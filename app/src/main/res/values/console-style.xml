@@ -1,15 +1,19 @@
 <resources>
-    <style name="Theme.Assistant.Console" parent="android:style/Theme.Material.NoActionBar">
+    <style name="Theme.Assistant.Console" parent="Theme.Assistant">
         <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#83EDFA</item>
-        <item name="android:windowBackground">#060D16</item>
+        <item name="android:colorAccent">#FFFFFF</item>
+        <item name="android:windowBackground">#000000</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
-        <item name="android:statusBarColor">#060D16</item>
-        <item name="android:navigationBarColor">#060D16</item>
-        <item name="android:windowSplashScreenBackground">#060D16</item>
+        <item name="android:statusBarColor">#000000</item>
+        <item name="android:navigationBarColor">#000000</item>
+        <item name="android:windowSplashScreenBackground">#000000</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_core</item>
-        <item name="android:windowSplashScreenIconBackgroundColor">#060D16</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">#000000</item>
         <item name="android:windowSoftInputMode">adjustResize</item>
-    </style>
+    <item name="android:colorButtonNormal">#000000</item>
+<item name="android:colorControlNormal">#FFFFFF</item>
+<item name="android:colorControlActivated">#FFFFFF</item>
+<item name="android:colorBackgroundFloating">#000000</item>
+</style>
 </resources>

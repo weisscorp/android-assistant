@@ -62,7 +62,7 @@ object BuiltinModels {
     }
     /** The release gate is bound to the exact compiled Android runtime, not a model marketing name. */
     fun available(context: Context): List<ModelMetadata> = all(context).filter {
-        it.validatedBinding == LocalBrain.bindingRevision && it.architecture in setOf("lfm2", "qwen3", "qwen35", "gemma3")
+        it.validatedBinding == LocalBrain.bindingRevision && it.architecture in setOf("lfm2", "qwen3", "qwen35", "gemma3", "llama")
     }
     fun find(context: Context, id: String): ModelMetadata? = available(context).singleOrNull { it.id == id }
 }

@@ -26,13 +26,16 @@ class VoiceConversation internal constructor(
     private val transcript: ((String, Boolean) -> Unit)? = null,
     private val textOnly: Boolean = false,
     private val replyObserver: ((String) -> Unit)? = null,
-    private val weatherSource: WeatherDataSource = OpenMeteo
+    private val weatherSource: WeatherDataSource = OpenMeteo,
+    private val speechSample: ((String,String) -> Unit)? = null
 ) {
     companion object {
         @Volatile private var activeConversation: VoiceConversation? = null
         internal val activePhase: Phase? get() = activeConversation?.diagnostics?.phase
+        internal val activeAudioSpectrum: FloatArray get() = activeConversation?.audioSpectrum ?: FloatArray(AudioSpectrum.BANDS)
         internal val activeSpeechLevel: Int get() = activeConversation?.speechLevel ?: 0
         fun finishActiveUtterance() { activeConversation?.finishUtterance() }
+        internal fun interruptForClock() { activeConversation?.end("clock_ring") }
         fun stopActive(): Boolean {
             val active = activeConversation ?: return false
             active.stop()
@@ -54,10 +57,13 @@ class VoiceConversation internal constructor(
     private val people = PeopleMemory(this.context)
     private val mobileApps = MobileApps(this.context)
     private var peoplePending: Pair<Long, (VoiceCommand) -> Unit>? = null
-    private var brainMode = runCatching { AssistantRequests.Mode.valueOf(context.getSharedPreferences("settings", 0).getString("brain_mode", "AUTO")!!) }.getOrDefault(AssistantRequests.Mode.AUTO)
+    private var brainMode = runCatching { AssistantRequests.Mode.valueOf(context.getSharedPreferences("settings", 0).getString("brain_mode", "LOCAL")!!) }.getOrDefault(AssistantRequests.Mode.LOCAL)
     private val hermesSession = java.util.UUID.randomUUID().toString()
     private var serverAnnounced = false
     private var localRequest: String? = null
+    private var clarification: Pair<VoiceSlot, Long>? = null
+    private var lastAnswer = ""
+    private var lastHeard = ""
     private val callGuard = CallGuard(this.context) {
         status("Разговор завершён: входящий или активный звонок."); end("phone_call")
     }
@@ -76,14 +82,21 @@ class VoiceConversation internal constructor(
     private var route: AudioRoute? = null
     private var audioLease: Int? = null
     private val playback = PlaybackReference()
+    private val microphoneSpectrum = AudioSpectrum()
+    private val visualSpectrum = ShortArray(AudioSpectrum.SIZE)
+    private val audioSpectrum: FloatArray get() = when(diagnostics.phase) {
+        Phase.LISTENING -> microphoneSpectrum.read()
+        Phase.SPEAKING -> { playback.frame(System.nanoTime(),visualSpectrum); AudioSpectrum.analyze(visualSpectrum) }
+        else -> FloatArray(AudioSpectrum.BANDS)
+    }
     private val visualAudio = ShortArray(160)
     private val speechLevel: Int get() {
         playback.frame(System.nanoTime(), visualAudio)
         return kotlin.math.sqrt(visualAudio.sumOf { it.toDouble() * it } / visualAudio.size).toInt()
     }
-    private fun createSpeech() = OfflineSpeech(this.context, playback, persistent = true, phoneMicrophone = phoneMicrophone, readyCueExpected = true,
+    private fun createSpeech() = OfflineSpeech(this.context, playback, persistent = true, phoneMicrophone = phoneMicrophone,
         level = { raw, clean, silenced -> diagnostics.capture(offlineSpeech.captureSource, offlineSpeech.inputDeviceType,
-            offlineSpeech.rawInputSamples, offlineSpeech.nonzeroInputSamples); diagnostics.audio(raw, clean, silenced); microphoneLevel?.invoke(raw, silenced) }, fatal = ::recordingFailed)
+            offlineSpeech.rawInputSamples, offlineSpeech.nonzeroInputSamples); diagnostics.audio(raw, clean, silenced); microphoneLevel?.invoke(raw, silenced) }, fatal = ::recordingFailed, signal = { pcm, silenced -> microphoneSpectrum.push(pcm,silenced) })
     internal fun recordingFailed(error: String) {
         journal?.event("recording_error", InteractionJournal.data("error" to error))
         if (!closed) {
@@ -115,6 +128,10 @@ class VoiceConversation internal constructor(
 
     fun start() {
         if (closed || started) return
+        if (!textOnly && AlarmRingService.ringing) {
+            status("Звонит таймер или будильник. Скажите «стоп» или откройте сигнал.")
+            close("clock_ringing"); finished(); return
+        }
         started = true
         activeConversation?.takeIf { it !== this }?.close("replaced")
         activeConversation = this
@@ -179,8 +196,7 @@ class VoiceConversation internal constructor(
         }
     }
     private fun readyCue() {
-        offlineSpeech.muteReadyCue()
-        ReadyCue.play(context, phoneMicrophone)
+        ReadyCue.play(context, phoneMicrophone, reference = playback)
     }
     private class EndCue(var next: () -> Unit, var completed: Boolean = false)
     private var endCue: EndCue? = null
@@ -192,8 +208,7 @@ class VoiceConversation internal constructor(
         val cue = EndCue(next).also { endCue = it }
         diagnostics.phase(Phase.THINKING)
         status("Обрабатываю запись…")
-        offlineSpeech.muteReadyCue(500)
-        ReadyCue.play(context, phoneMicrophone, descending = true) { error ->
+        ReadyCue.play(context, phoneMicrophone, descending = true, reference = playback) { error ->
             // Leave the Bluetooth transport tail clear before starting speech or barge-in.
             main.postDelayed({
                 if (!closed && endCue === cue) {
@@ -225,7 +240,7 @@ class VoiceConversation internal constructor(
             val generation = turn
             recognition?.result(InteractionJournal.data("text" to text, "error" to error, "capture_source" to offlineSpeech.captureSource, "device_type" to offlineSpeech.inputDeviceType, "input_samples" to offlineSpeech.rawInputSamples, "nonzero_samples" to offlineSpeech.nonzeroInputSamples))
             recognizedCall = recognition?.id
-            if (!text.isNullOrBlank()) { recognized?.invoke(text); transcript?.invoke(text, true) }
+            if (!text.isNullOrBlank()) { recognized?.invoke(text); transcript?.invoke(text, true); offlineSpeech.lastSampleId?.let {speechSample?.invoke(it,text)} }
             val processResult = {
                 if (!closed && generation == turn) when {
                     error != null -> say(error) { end("recording_error") }
@@ -254,8 +269,43 @@ class VoiceConversation internal constructor(
         status(text)
         localRequest = null
         val sourceAlias = PresenceFacts.query(text)
-        val command = if (sourceAlias != null && SavedSources(context).matching(sourceAlias).isNotEmpty())
+        var command = if (sourceAlias != null && SavedSources(context).matching(sourceAlias).isNotEmpty())
             VoiceCommand.ReadSource(sourceAlias) else VoiceCommands.parse(text)
+        val waitingSlot = clarification
+        clarification = null
+        if (command == VoiceCommand.Repeat) { clarification = waitingSlot; say(lastAnswer.ifBlank { "Пока нечего повторять." }); return }
+        if (command == VoiceCommand.Heard) { clarification = waitingSlot; say(lastHeard.ifBlank { "Пока не было другой команды." }); return }
+        if (command == VoiceCommand.ControlHelp) { clarification = waitingSlot; say(PhoneCommands.HELP); return }
+        if (waitingSlot != null && command != VoiceCommand.Cancel && command != VoiceCommand.Stop) {
+            if (command is VoiceCommand.Chat || command == VoiceCommand.Confirm ||
+                (waitingSlot.first == VoiceSlot.TEXT && command !is VoiceCommand.Write) ||
+                (waitingSlot.first == VoiceSlot.BUTTON && command !is VoiceCommand.Tap) ||
+                (waitingSlot.first in setOf(VoiceSlot.VOLUME, VoiceSlot.BRIGHTNESS) && command is VoiceCommand.Choose)) {
+                if (SystemClock.elapsedRealtime() > waitingSlot.second) {
+                    say("Время уточнения истекло. Повторите команду целиком."); return
+                }
+                val body = text.trim()
+                val resolved = if (command == VoiceCommand.Confirm) null else when (waitingSlot.first) {
+                    VoiceSlot.APP -> body.takeIf { it.length in 1..120 }?.let { VoiceCommand.Open(it) }
+                    VoiceSlot.CONTACT -> body.takeIf { it.length in 1..120 }?.let { VoiceCommand.Call(it) }
+                    VoiceSlot.TEXT -> body.takeIf { it.length in 1..1000 }?.let { VoiceCommand.Write(it) }
+                    VoiceSlot.BUTTON -> body.takeIf { it.length in 1..120 }?.let { VoiceCommand.Tap(it) }
+                    VoiceSlot.VOLUME -> PhoneCommands.percent(body)?.let { VoiceCommand.Phone(PhoneRequest(PhoneAction.VOLUME, it)) }
+                    VoiceSlot.BRIGHTNESS -> PhoneCommands.percent(body)?.takeIf { it > 0 }?.let { VoiceCommand.Phone(PhoneRequest(PhoneAction.BRIGHTNESS, it)) }
+                }
+                if (resolved == null) {
+                    clarification = waitingSlot
+                    say(PhoneCommands.prompt(waitingSlot.first)); return
+                }
+                command = resolved
+            }
+        }
+        lastHeard = text
+        if (command is VoiceCommand.Clarify) {
+            val slot = command.slot
+            clarification = slot to (SystemClock.elapsedRealtime() + 60_000)
+            say(PhoneCommands.prompt(slot)); return
+        }
         journal?.event("request_route", InteractionJournal.command(command, expectedPackage))
         tools.clockAnswer(command,text)?.let { deliver(it); return }
         val personChoice = peoplePending
@@ -352,6 +402,7 @@ class VoiceConversation internal constructor(
         } else if (command is VoiceCommand.BrainMode) {
             tools.clear(); mobileApps.clear()
             brainMode = command.mode; serverAnnounced = false
+            context.getSharedPreferences("settings", 0).edit().putString("brain_mode", brainMode.name).apply()
             say(when (brainMode) {
                 AssistantRequests.Mode.LOCAL -> "Работаю на телефоне. Сервер автоматически не подключаю."
                 AssistantRequests.Mode.AUTO -> "Автоматический режим. Команды телефона выполняю локально, сложные вопросы передаю настроенному Hermes."
@@ -359,13 +410,15 @@ class VoiceConversation internal constructor(
                     else "Для вопросов выбран Hermes. Распознавание и озвучка остаются на телефоне. Связь проверю при следующем запросе."
             })
         } else if (command == VoiceCommand.Capabilities || command == VoiceCommand.Help) {
-            tools.clear(); say(CapabilityCatalog.message(context).take(3000))
+            tools.clear(); say(if (brainMode == AssistantRequests.Mode.LOCAL) PhoneCommands.HELP else CapabilityCatalog.message(context).take(3000))
         } else if (command == VoiceCommand.People) {
             tools.clear(); say(people.message())
         } else if (command == VoiceCommand.Sources) {
             val items = SavedSources(context).list()
             say(if (items.isEmpty()) "Знаний пока нет. Добавьте чат, страницу, место или картинку через Поделиться в Ассистент либо в Параметрах, Поведение и память, Знания и источники."
                 else "Сохранены: ${items.joinToString("; ") { it.name }}. Спросите где и сохранённое название.")
+        } else if (command is VoiceCommand.AudioNotes) {
+            say(tools.execute(command)?.text ?: "Заметки недоступны.")
         } else if (command is VoiceCommand.ReadSource) {
             readSource(command.alias, question = text)
         } else if (command is VoiceCommand.RememberPerson) {
@@ -421,6 +474,11 @@ class VoiceConversation internal constructor(
             submitServer(command)
         } else if (command is VoiceCommand.Chat) {
             tools.clear()
+            ArithmeticReply.answer(command.text)?.let { answer ->
+                history.add(command.text to answer)
+                if (history.size > 4) history.removeAt(0)
+                say(answer); return
+            }
             val knowledge = SavedSources(context).relevant(command.text)
             val location = LocationQuestion.subject(command.text, people.list().flatMap { listOf(it.alias, it.name) })
             if (location != null && knowledge.isEmpty()) { say(LocationQuestion.MISSING); return }
@@ -581,7 +639,6 @@ class VoiceConversation internal constructor(
         }
     }
     private fun openThen(command: VoiceCommand.OpenThen) {
-        releaseScreen()
         tools.clear()
         if (PhoneAccessibility.connected == null) {
             say("Для продолжения команды в приложении включите доступ к экрану в настройках помощника."); return
@@ -595,7 +652,11 @@ class VoiceConversation internal constructor(
     }
     private fun continueOpen(command: VoiceCommand.OpenThen, reply: DeviceTools.Reply, continued: (() -> Unit)? = null) {
         val expected = reply.openedPackage
+        if (expected == null && reply.handoff && reply.afterSpeech != null) {
+            deliver(reply.copy(text = reply.text + " Следующую команду скажите после открытия приложения.")); return
+        }
         if (expected == null || reply.afterSpeech == null) { deliver(reply); return }
+        releaseScreen()
         say(reply.text) {
             val failure = reply.beforeOpening?.invoke() ?: if (PhoneAccessibility.connected?.foregroundPackage() == expected) null else reply.afterSpeech.invoke()
             journal?.event("action_receipt", InteractionJournal.data("name" to "open_app", "package" to expected, "error" to failure))
@@ -702,14 +763,14 @@ class VoiceConversation internal constructor(
             task.pkg = reply.openedPackage
             continueOpen(VoiceCommand.OpenThen(action.app, ""), reply) {
                 task.receipts.add("Открыто приложение ${action.app}")
-                task.remaining = ScreenTaskProgress.remaining(task.remaining, action)
+                task.remaining = ScreenTaskProgress.remaining(task.remaining, action, AppKnowledge(context)::sameApp)
                 nextScreenStep(task)
             }
             return
         }
         fun completed(receipt: String) {
             journal?.event("action_receipt", InteractionJournal.data("command" to InteractionJournal.command(action), "text" to receipt))
-            task.remaining = ScreenTaskProgress.remaining(task.remaining, action)
+            task.remaining = ScreenTaskProgress.remaining(task.remaining, action, AppKnowledge(context)::sameApp)
             task.receipts.add(when (action) {
                 is VoiceCommand.Tap -> "Нажата кнопка ${action.label}: $receipt"
                 is VoiceCommand.Write -> "Записан текст ${action.text}: $receipt"
@@ -865,10 +926,15 @@ class VoiceConversation internal constructor(
     }
     private fun executeInternal(command: VoiceCommand, expectedPackage: String?, done: (DeviceTools.Reply?) -> Unit) {
         if (command is VoiceCommand.Navigate) { releaseScreen(); done(mobileApps.navigate(NavigationRequest(command.destination))); return }
-        if (command is VoiceCommand.Open || command is VoiceCommand.Write || command is VoiceCommand.Tap ||
-            command is VoiceCommand.Scroll || command == VoiceCommand.Screen || command == VoiceCommand.Confirm ||
-            command is VoiceCommand.Choose) releaseScreen()
-        if (command == VoiceCommand.Screen) {
+        if (command is VoiceCommand.Write || command is VoiceCommand.Tap ||
+            command is VoiceCommand.Scroll || command == VoiceCommand.Screen ||
+            ((command == VoiceCommand.Confirm || command is VoiceCommand.Choose) && !tools.choosingApp)) releaseScreen()
+        if (command == VoiceCommand.Buttons) {
+            if (PhoneAccessibility.connected == null) { done(tools.execute(command)); return }
+            releaseScreen()
+            val generation = turn
+            main.postDelayed({ if (!closed && generation == turn) done(tools.execute(command)) }, 200)
+        } else if (command == VoiceCommand.Screen) {
             val frame = PhoneAccessibility.connected?.foregroundSnapshot()
             if (frame == null) { done(DeviceTools.Reply("Для чтения экрана разблокируйте телефон и включите доступ к экрану.")); return }
             val generation = turn
@@ -934,24 +1000,14 @@ class VoiceConversation internal constructor(
                     val data = result?.observation
                     if (data == null) { clearWorkDeadline(); localRequest = null; say("Инструмент не вернул данные проигрывателя."); return@execute }
                     diagnostics.tool(data.tool, data.operation, "returned_" + data.status)
-                    diagnostics.phase(Phase.THINKING); status("Готовлю ответ по данным проигрывателя…")
-                    clearWorkDeadline()
-                    // A response timeout keeps the successfully read facts instead of discarding them.
-                    workDeadline = Runnable {
-                        if (!closed && generation == turn) {
-                            cancelWork(); localRequest = null
-                            diagnostics.tool(data.tool, data.operation, "answer_timeout")
-                            say(data.fallback)
-                        }
-                    }.also { main.postDelayed(it, 30_000) }
-                    LocalBrain.answerTool(context, text, data) { answer ->
-                        if (closed || generation != turn) return@answerTool
-                        clearWorkDeadline(); localRequest = null
-                        diagnostics.tool(data.tool, data.operation, "answered_after_result")
-                        history.add(text to answer)
-                        if (history.size > 4) history.removeAt(0)
-                        say(answer)
-                    }
+                    // The tool already formats these exact metadata and missing-data states.
+                    // Re-generating that sentence adds a second inference without new information.
+                    clearWorkDeadline(); localRequest = null
+                    diagnostics.tool(data.tool, data.operation, "answered_after_result")
+                    journal?.event("tool_answer_formatted", InteractionJournal.data("tool" to data.tool, "status" to data.status))
+                    history.add(text to data.fallback)
+                    if (history.size > 4) history.removeAt(0)
+                    say(data.fallback)
                 }
                 return@plan
             }
@@ -974,6 +1030,8 @@ class VoiceConversation internal constructor(
         }
     }
     private fun deliver(reply: DeviceTools.Reply) {
+        // Keep the voice entry visible for failed/uncertain application names.
+        if ((reply.openedPackage != null || reply.releaseScreen) && reply.afterSpeech != null) releaseScreen()
         journal?.event("tool_reply", InteractionJournal.reply(reply))
         reply.mediaHandoff?.let { handoff ->
             say(reply.text) {
@@ -1045,6 +1103,7 @@ class VoiceConversation internal constructor(
         cancelRecognition()
         diagnostics.phase(Phase.SPEAKING)
         val answer = SpokenReply.answer(text)
+        lastAnswer = answer
         val trace = journal
         trace?.event("assistant_response", InteractionJournal.data("text" to answer, "original_text" to text, "display" to display, "text_only" to textOnly))
         status(display?.takeIf(SpokenReply::hasContent) ?: answer)

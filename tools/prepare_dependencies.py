@@ -170,6 +170,35 @@ def install(archive, output, spec):
                 temporary.unlink(missing_ok=True)
 
 
+def package_files(spec, output, cache):
+    """Bundle individually pinned upstream weights; never execute model repository code."""
+    if output.is_symlink():
+        raise ValueError('Symlink destination is refused')
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=output.parent, delete=False) as stream:
+        temporary = Path(stream.name)
+    try:
+        names, expanded = set(), 0
+        with zipfile.ZipFile(temporary, 'w', zipfile.ZIP_DEFLATED) as target:
+            for part in spec['files']:
+                name = str(member_path(part['name']))
+                if name in names:
+                    raise ValueError('Duplicate model member')
+                names.add(name)
+                source = download(part, cache)
+                expanded += source.stat().st_size
+                if expanded > MAX_EXPANDED:
+                    raise ValueError('Expanded model exceeds bound')
+                info = zipfile.ZipInfo('model/' + name, date_time=(2025, 12, 16, 0, 0, 0))
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.external_attr = 0o100644 << 16
+                with source.open('rb') as src, target.open(info, 'w', force_zip64=True) as dst:
+                    shutil.copyfileobj(src, dst)
+        temporary.replace(output)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--group', choices=('build', 'speech', 'ocr', 'piper'), default='build')
@@ -182,8 +211,11 @@ def main():
         parser.error('Review the voice license in THIRD_PARTY.md; piper requires --accept-noncommercial')
     for spec in selected:
         output = ROOT / str(member_path(spec['target']))
-        archive = download(spec, args.cache)
-        install(archive, output, spec)
+        if spec['format'] == 'model-files':
+            package_files(spec, output, args.cache)
+        else:
+            archive = download(spec, args.cache)
+            install(archive, output, spec)
         print('Prepared ' + spec['id'])
 
 

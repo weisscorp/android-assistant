@@ -21,9 +21,15 @@ class PhoneAccessibility : AccessibilityService() {
         if (getSystemService(KeyguardManager::class.java).isDeviceLocked) return null
         // Confirmation must bind to current UI, not a cached node from a prior window.
         clearCache()
-        val applications = windows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+        val currentWindows = windows
+        // The expanded shade/quick settings are system windows, not application
+        // windows. A focused active SystemUI surface is controllable too; never
+        // select a passive navigation bar or keyboard as the current screen.
+        val system = currentWindows.filter { it.type == AccessibilityWindowInfo.TYPE_SYSTEM && it.isActive && it.isFocused }
+            .mapNotNull { it.root?.takeIf { node -> node.packageName?.toString() == "com.android.systemui" } }
+        val applications = currentWindows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
             .mapNotNull { it.root?.takeIf { node -> node.packageName?.toString() != packageName } }
-        return applications.firstOrNull { it.window?.isActive == true }
+        return system.singleOrNull() ?: applications.firstOrNull { it.window?.isActive == true }
             ?: applications.singleOrNull()
     }
 

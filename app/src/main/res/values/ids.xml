@@ -11,6 +11,12 @@
     <item name="settings_certificate" type="id" />
     <item name="settings_cue_volume" type="id" />
     <item name="settings_cue_volume_label" type="id" />
+    <item name="mascot_preview" type="id" />
+    <item name="mascot_palette_label" type="id" />
+    <item name="mascot_custom_palette" type="id" />
+    <item name="mascot_primary_hue" type="id" />
+    <item name="mascot_secondary_hue" type="id" />
+    <item name="mascot_accent_hue" type="id" />
     <item name="source_name" type="id" />
     <item name="source_kind" type="id" />
     <item name="source_value" type="id" />
@@ -21,4 +27,8 @@
     <item name="source_instructions" type="id" />
     <item name="source_follow_links" type="id" />
     <item name="source_recipe" type="id" />
+    <item name="assistant_audio_notes" type="id" />
+    <item name="audio_note_record" type="id" />
+    <item name="audio_note_search" type="id" />
+    <item name="audio_note_list" type="id" />
 </resources>

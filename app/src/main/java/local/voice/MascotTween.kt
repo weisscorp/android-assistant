@@ -11,7 +11,8 @@ import kotlin.math.pow
 /** Keyframe interpolation independent of Android, character artwork and wall-clock time. */
 internal class MascotTween {
     enum class Channel(val initial: Float) {
-        SCALE_X(1f), SCALE_Y(1f), LIFT(0f), TILT(0f), EYES(1f), WOBBLE(0f)
+        SCALE_X(1f), SCALE_Y(1f), LIFT(0f), TILT(0f), EYES(1f), WOBBLE(0f),
+        OFFSET_X(0f), OFFSET_Y(0f), LOOK_X(0f), LOOK_Y(0f), JOY(0f), WINK(0f)
     }
     enum class Ease {
         LINEAR, OUT, IN_OUT, BACK;

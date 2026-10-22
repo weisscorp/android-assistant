@@ -14,7 +14,7 @@ import org.junit.runner.RunWith
 /** Explicit emulator-only runner; the external fixture publishes metadata without playing audio. */
 @RunWith(AndroidJUnit4::class)
 class NowPlayingConversationTest {
-    @Test fun modelCallsReaderReceivesResultAndAnswersWithoutControllingPlayback() {
+    @Test fun modelCallsReaderAndUsesFormattedResultWithoutControllingPlayback() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val component = PhoneNotifications.component(context)
@@ -44,9 +44,9 @@ class NowPlayingConversationTest {
                 }
                 assertTrue("Model/tool loop did not answer; statuses=$statuses, failure=${LocalBrain.lastFailure}", received.await(90, java.util.concurrent.TimeUnit.SECONDS))
                 assertEquals(1, answers.size)
-                assertNotSame("The model must select a tool and receive its output", stats, LocalBrain.lastStats)
+                assertNotSame("The model must select the reader", stats, LocalBrain.lastStats)
                 assertTrue(statuses.toString(), statuses.contains("Читаю данные проигрывателя…"))
-                assertTrue(statuses.toString(), statuses.contains("Готовлю ответ по данным проигрывателя…"))
+                assertFalse("Metadata must not cause a second inference", statuses.contains("Готовлю ответ по данным проигрывателя…"))
                 assertTrue(audio.activeRecordingConfigurations.isEmpty())
                 assertEquals(0L, conversation!!.speechFrames)
                 instrumentation.runOnMainSync { conversation?.close() }

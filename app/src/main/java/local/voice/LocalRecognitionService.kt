@@ -12,12 +12,12 @@ class LocalRecognitionService : RecognitionService() {
     private var speech: OfflineSpeech? = null
     private var active: Callback? = null
     override fun onStartListening(recognizerIntent: Intent, listener: Callback) {
-        if (active != null) { listener.error(SpeechRecognizer.ERROR_RECOGNIZER_BUSY); return }
+        if (active != null || AlarmRingService.ringing) { listener.error(SpeechRecognizer.ERROR_RECOGNIZER_BUSY); return }
         val language = recognizerIntent.getStringExtra(RecognizerIntent.EXTRA_LANGUAGE)
         if (language != null && !language.startsWith("ru", true)) { listener.error(SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED); return }
         active = listener
         var ready = false
-        val selected = if (getSharedPreferences("settings", 0).getBoolean("tone_asr", false)) "t-one" else "vosk"
+        val selected = SpeechEngines.selected(this).id
         if (speech?.engineName != selected) { speech?.close(); speech = null }
         val engine = speech ?: OfflineSpeech(this).also { speech = it }
         engine.listen(false, { text ->

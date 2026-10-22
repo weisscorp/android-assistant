@@ -22,10 +22,10 @@ class ModelCatalogTest {
     @Test fun catalogHasAllPinnedArchitecturesAndMatchingRuntimeProof() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val all = BuiltinModels.all(context)
-        assertEquals(7, all.size)
+        assertEquals(9, all.size)
         assertEquals("qwen35-2b-q4km", all.first().id)
         assertEquals(all, BuiltinModels.available(context))
-        assertEquals(setOf("lfm2", "qwen3", "qwen35", "gemma3"), all.map { it.architecture }.toSet())
+        assertEquals(setOf("lfm2", "qwen3", "qwen35", "gemma3", "llama"), all.map { it.architecture }.toSet())
         all.forEach {
             assertTrue(it.size in 1..ModelMetadata.MAX_CATALOG_BYTES)
             assertTrue(it.chatTemplate.isNotBlank())

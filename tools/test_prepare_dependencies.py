@@ -6,7 +6,7 @@ import tarfile
 import tempfile
 import unittest
 import zipfile
-from prepare_dependencies import install, member_path
+from prepare_dependencies import install, member_path, package_files
 
 
 class DependencyTests(unittest.TestCase):
@@ -97,6 +97,23 @@ class DependencyTests(unittest.TestCase):
         for path in ('/outside', '../outside', 'root/../outside', 'root\\outside'):
             with self.assertRaises(ValueError):
                 member_path(path)
+
+    def test_individually_pinned_weights_bundle_atomically_without_network(self):
+        cache = self.root / 'cache'; cache.mkdir()
+        files = []
+        for name, data in [('encoder.onnx', b'weights'), ('LICENSE', b'MIT notice')]:
+            (cache / name).write_bytes(data)
+            files.append(dict(id=name, name=name, cache=name, sha256=hashlib.sha256(data).hexdigest(), maxBytes=len(data)))
+        output = self.root / 'weights.zip'
+        package_files(dict(files=files), output, cache)
+        with zipfile.ZipFile(output) as bundle:
+            self.assertEqual(bundle.read('model/LICENSE'), b'MIT notice')
+            self.assertEqual(bundle.read('model/encoder.onnx'), b'weights')
+        old = output.read_bytes()
+        (cache / 'encoder.onnx').write_bytes(b'changed')
+        with self.assertRaises(ValueError):
+            package_files(dict(files=files), output, cache)
+        self.assertEqual(output.read_bytes(), old)
 
 
 if __name__ == '__main__':

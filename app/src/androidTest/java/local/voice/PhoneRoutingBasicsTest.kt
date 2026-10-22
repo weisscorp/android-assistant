@@ -46,7 +46,9 @@ class PhoneRoutingBasicsTest {
     @Test fun catalogUsesPhoneAppModulesAndDoesNotExportAddressBookOrTokens() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val capabilities = CapabilityCatalog.json(context)
-        assertEquals(9, capabilities.length())
+        val exportedNames = (0 until capabilities.length()).map { capabilities.getJSONObject(it).getString("name") }
+        assertEquals(setOf("time", "clock", "battery", "open", "call", "telegram", "navigate", "music", "media", "weather"), exportedNames.toSet())
+        assertEquals(exportedNames.distinct().size, exportedNames.size)
         val serialized = capabilities.toString()
         assertFalse(serialized.contains("token_iv"))
         assertFalse(serialized.contains("lookup"))

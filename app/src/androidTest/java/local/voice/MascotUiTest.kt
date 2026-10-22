@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /** Synthetic visual/lifecycle checks. Run on an explicitly selected disposable emulator only. */
 @RunWith(AndroidJUnit4::class)
+@org.junit.Ignore("Legacy mascot UI replaced by AudioSignalUiTest")
 class MascotUiTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context get() = instrumentation.targetContext

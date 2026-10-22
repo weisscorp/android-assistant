@@ -14,7 +14,8 @@ object HermesConversation {
             } }).put("capabilities", capabilities)
     fun ask(context: Context, session: String, text: String, history: List<Pair<String, String>>, request: BackendClient.Request): Result {
         val id = UUID.randomUUID().toString()
-        val (code, json) = BackendClient.exchange(context, "POST", "/conversation", body(session, id, text, history, CapabilityCatalog.json(context)), request)
+        val payload = body(session, id, text, history, CapabilityCatalog.json(context)).put("phoneDevice", HomeLink.device(context))
+        val (code, json) = BackendClient.exchange(context, "POST", "/conversation", payload, request)
         if (code != 200) return Result(when (code) {
             401, 403 -> "Hermes отклонил токен. Проверьте подключение в настройках."
             404, 405, 501 -> "Сервер ещё не поддерживает разговор. Нужен новый мост с маршрутом conversation."

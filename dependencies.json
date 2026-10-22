@@ -107,6 +107,67 @@
       "sha256": "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2",
       "license": "Apache-2.0",
       "maxBytes": 10000000
+    },
+    {
+      "id": "gigaam-v3-ru",
+      "group": "speech",
+      "format": "model-files",
+      "target": "app/src/main/assets/speech-gigaam-ru.zip",
+      "revision": "0424d62637b37d8b7b1eb0f75a04d78dec55fdcc",
+      "license": "MIT, GigaChat Team",
+      "files": [
+        {
+          "id": "gigaam-v3-encoder.int8.onnx",
+          "name": "encoder.int8.onnx",
+          "cache": "gigaam-v3-encoder.int8.onnx",
+          "url": "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-transducer-giga-am-v3-russian-2025-12-16/resolve/0424d62637b37d8b7b1eb0f75a04d78dec55fdcc/encoder.int8.onnx",
+          "sha256": "0ec54e5f130a91c0f228d21795ede10b31c992a1f73e45dcd827e843a71a9b50",
+          "maxBytes": 224570814
+        },
+        {
+          "id": "gigaam-v3-decoder.onnx",
+          "name": "decoder.onnx",
+          "cache": "gigaam-v3-decoder.onnx",
+          "url": "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-transducer-giga-am-v3-russian-2025-12-16/resolve/0424d62637b37d8b7b1eb0f75a04d78dec55fdcc/decoder.onnx",
+          "sha256": "5d1cfef155d8e07f213bd2f3229b5f6c5c29355c7fa5c1b9eb62cb1925725254",
+          "maxBytes": 3331651
+        },
+        {
+          "id": "gigaam-v3-joiner.onnx",
+          "name": "joiner.onnx",
+          "cache": "gigaam-v3-joiner.onnx",
+          "url": "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-transducer-giga-am-v3-russian-2025-12-16/resolve/0424d62637b37d8b7b1eb0f75a04d78dec55fdcc/joiner.onnx",
+          "sha256": "fd1d02f45c2ad3d6b67cc149811ad794ab4b020ed49a0a9e2790a8619d1cddd8",
+          "maxBytes": 1440448
+        },
+        {
+          "id": "gigaam-v3-tokens.txt",
+          "name": "tokens.txt",
+          "cache": "gigaam-v3-tokens.txt",
+          "url": "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-transducer-giga-am-v3-russian-2025-12-16/resolve/0424d62637b37d8b7b1eb0f75a04d78dec55fdcc/tokens.txt",
+          "sha256": "17cc514451bcceac9c280068c71502f8448f99e9fb1456b8d0761651fd0392f2",
+          "maxBytes": 196
+        },
+        {
+          "id": "gigaam-v3-LICENSE",
+          "name": "LICENSE",
+          "cache": "gigaam-v3-LICENSE",
+          "url": "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-transducer-giga-am-v3-russian-2025-12-16/resolve/0424d62637b37d8b7b1eb0f75a04d78dec55fdcc/LICENSE",
+          "sha256": "f00de6715714c7a63d08639cdbfaa40224eefc407302614bd19f1a8b98c875aa",
+          "maxBytes": 1070
+        }
+      ]
+    },
+    {
+      "id": "silero-vad",
+      "group": "speech",
+      "format": "file",
+      "target": "app/src/main/assets/silero_vad.onnx",
+      "cache": "silero-vad-9e2449e1.onnx",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx",
+      "sha256": "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6",
+      "maxBytes": 1000000,
+      "license": "MIT"
     }
   ]
 }

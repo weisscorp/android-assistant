@@ -10,6 +10,14 @@ class AssistantApplication : Application(), Application.ActivityLifecycleCallbac
     private var resumed = 0
     override fun onCreate() {
         super.onCreate(); registerActivityLifecycleCallbacks(this)
+        // This release makes local control the default. Explicit later mode changes
+        // stay persistent; no recording or model download is started by migration.
+        val preferences = getSharedPreferences("settings", 0)
+        if (!preferences.getBoolean("local_control_default_v1", false))
+            preferences.edit().putString("brain_mode", "LOCAL").putBoolean("local_control_default_v1", true).apply()
+        AppKnowledge.start(this)
+        AudioNoteTranscriber.resume(this)
+        SpeechDatasetRecorder.recover(this)
         OtaClient.consumeBootstrap(this)
         runCatching { AutoUpdates.schedule(this) }
     }

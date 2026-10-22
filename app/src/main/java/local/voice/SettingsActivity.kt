@@ -79,6 +79,7 @@ class SettingsActivity : Activity() {
             SettingsSection.ACCESS -> showAccess()
             SettingsSection.MODELS -> showModels()
             SettingsSection.AUDIO -> showAudio()
+            SettingsSection.APPEARANCE -> content.addView(AudioSignalSettingsView(this), LinearLayout.LayoutParams(-1, -2))
             SettingsSection.TESTS -> showTests()
             SettingsSection.PERSONAL -> showPersonal()
             SettingsSection.CLOCK -> button("Открыть время и напоминания") { startActivity(Intent(this, ClockActivity::class.java)) }
@@ -86,10 +87,15 @@ class SettingsActivity : Activity() {
         }
         status = label("").apply { accessibilityLiveRegion = android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE }
         label("Ассистент · ${packageManager.getPackageInfo(packageName, 0).versionName}", 13f).apply { setPadding(0, dp(12), 0, 0) }
-        setContentView(ScrollView(this).apply {
+        // Insets belong outside the scroll viewport. Padding the ScrollView itself lets
+        // native focus/requestRectangleOnScreen scroll the first control behind the status bar.
+        val scroll = ScrollView(this).apply {
             id = R.id.settings_scroll; isVerticalScrollBarEnabled = false
+            addView(layout, FrameLayout.LayoutParams(-1, -2, android.view.Gravity.CENTER_HORIZONTAL))
+        }
+        setContentView(FrameLayout(this).apply {
             setBackgroundColor(palette.background)
-            addView(layout, android.widget.FrameLayout.LayoutParams(-1, -2, android.view.Gravity.CENTER_HORIZONTAL))
+            addView(scroll, FrameLayout.LayoutParams(-1, -1))
             setOnApplyWindowInsetsListener { view, insets ->
                 val bars = insets.getInsets(android.view.WindowInsets.Type.systemBars())
                 val keyboard = insets.getInsets(android.view.WindowInsets.Type.ime())
@@ -98,7 +104,7 @@ class SettingsActivity : Activity() {
         })
     }
     private fun showMenu() {
-        for (item in listOf(SettingsSection.ACCESS, SettingsSection.MODELS, SettingsSection.AUDIO, SettingsSection.TESTS)) {
+        for (item in listOf(SettingsSection.ACCESS, SettingsSection.MODELS, SettingsSection.AUDIO, SettingsSection.APPEARANCE, SettingsSection.TESTS)) {
             navigation += ui.navigation(content, item) { openSection(item) }
         }
         label("ЕЩЁ ПАРАМЕТРЫ", 12f).apply { letterSpacing = .1f; setPadding(0, dp(20), 0, 0) }
@@ -114,6 +120,15 @@ class SettingsActivity : Activity() {
         group("Состояние доступов") { capability = label("") }
         group("Голос и системный вызов", "Выберите ассистента и разрешите микрофон с Bluetooth.") {
             button("Выбрать системным ассистентом") { openAssistantSettings() }
+            label("В открывшихся настройках нажмите «Приложение цифрового помощника по умолчанию», затем выберите «Ассистент». Простого открытия этого экрана недостаточно.")
+            button("Google всё ещё открывается снизу") {
+                info("Системный жест и Google", "Выбор «Всегда» для гарнитуры не назначает системного помощника. Нажмите «Выбрать системным ассистентом». В открывшемся разделе нажмите верхний пункт выбора приложения цифрового помощника, затем выберите «Ассистент».\n\nЕсли роль уже выбрана, но удержание нижней полосы открывает выделение экрана Google, найдите в настройках телефона «Обвести и найти» (Circle to Search) и отключите. Это отдельная функция прошивки. Жест системного помощника обычно — свайп по диагонали из нижнего угла; его включение и возможность переназначить удержание зависят от прошивки.")
+            }
+            button("Разрешить управление фонариком") { requestPermissions(arrayOf(Manifest.permission.CAMERA), 25) }
+            button("Разрешить изменение яркости") {
+                startActivity(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, android.net.Uri.parse("package:$packageName")))
+            }
+            button("Команды автономного управления") { info("Управление без сервера", PhoneCommands.HELP) }
             button("Разрешить микрофон и Bluetooth") { requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.POST_NOTIFICATIONS), 10) }
             button("Местоположение для погоды и расстояния") { requestPermissions(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION), 14) }
             button("Уступать разговор входящим звонкам") { requestPermissions(arrayOf(Manifest.permission.READ_PHONE_STATE), 12) }
@@ -159,13 +174,17 @@ class SettingsActivity : Activity() {
                 info("Локальные модели", "LFM2.5, Qwen3, Qwen3.5 и Gemma 3: скачивание, выбор, удаление и benchmark. В каталоге только модели, проверенные с текущим Android runtime, до 2 ГБ на файл.\n\nТокенизация и шаблон диалога берутся из GGUF. Свой файл проверяется загрузкой и генерацией до переключения. Без chat template используется текстовый completion. Импорт ограничен свободным местом и памятью телефона.")
             }
         }
+        group("Улучшение распознавания", "Записи ваших реплик и исправленные расшифровки для дообучения ASR.") {
+            button("Датасет распознавания речи") {startActivity(Intent(this,SpeechDatasetActivity::class.java))}
+        }
         group("Распознавание и синтез", "Оба этапа работают на телефоне без сети и Google-приложений.") {
         asrChoice = button("") {
-            val selected = if (getSharedPreferences("settings", 0).getBoolean("tone_asr", false)) 1 else 0
+            val engines = SpeechEngine.entries
+            val selected = engines.indexOf(SpeechEngines.selected(this))
             android.app.AlertDialog.Builder(this).setTitle("Распознавание речи")
-                .setSingleChoiceItems(arrayOf("Vosk · компактная русская модель", "T-one · экспериментальная русская модель"), selected) { dialog, index ->
+                .setSingleChoiceItems(engines.map { "${it.label} · ${it.description}" }.toTypedArray(), selected) { dialog, index ->
                     stopForModelChange()
-                    getSharedPreferences("settings", 0).edit().putBoolean("tone_asr", index == 1).commit()
+                    SpeechEngines.select(this, engines[index])
                     ModelDownload.message = ""; refresh(); dialog.dismiss()
                 }.setNegativeButton("Закрыть", null).show()
         }
@@ -177,7 +196,7 @@ class SettingsActivity : Activity() {
                     stopForModelChange(); ModelCatalog.selectVoice(this, voices[index]); refresh(); dialog.dismiss()
                 }.setNegativeButton("Закрыть", null).show()
         }
-            label("Vosk — компактный. T-one требует больше памяти; качество в шуме зависит от гарнитуры.")
+            label("Vosk — компактный. T-one и GigaAM v3 требуют больше памяти. GigaAM выдаёт текст после паузы; все три работают без интернета.")
         }
         group("Собственная модель голоса", "Готовый русский голос Piper / VITS в ZIP, до 256 МБ после распаковки.") {
         button("Формат пакета голоса") {
@@ -317,6 +336,7 @@ class SettingsActivity : Activity() {
     private fun showPersonal() {
         group("Знания и источники", "Свяжите чат, страницу, место или заметку с понятным названием.") {
             button("Знания и источники") { startActivity(Intent(this, SourcesActivity::class.java)) }
+            button("Приложения и голосовые названия") { startActivity(Intent(this, AppKnowledgeActivity::class.java)) }
             label("Добавьте вручную или через «Поделиться» → «Ассистент». Затем скажите «Прочитай источник» и его название. Снимок карты не заменяет живую геопозицию.")
         }
         group("Память разговора и люди") {
@@ -366,7 +386,7 @@ class SettingsActivity : Activity() {
         group("Обработка вопросов") {
         button("Выбор мозга по умолчанию") {
             val modes = AssistantRequests.Mode.entries
-            val selected = getSharedPreferences("settings", 0).getString("brain_mode", "AUTO")
+            val selected = getSharedPreferences("settings", 0).getString("brain_mode", "LOCAL")
             android.app.AlertDialog.Builder(this).setTitle("Обработка вопросов")
                 .setSingleChoiceItems(arrayOf("Автоматически · команды здесь, сложные вопросы в Hermes", "Локально · без передачи разговоров", "Hermes · телефон распознаёт и озвучивает"), modes.indexOfFirst { it.name == selected }) { dialog, index ->
                     VoiceConversation.stopActive()
@@ -620,9 +640,11 @@ class SettingsActivity : Activity() {
     }
     private fun refresh() {
         val prefs = getSharedPreferences("settings", 0)
-        if (::asrChoice.isInitialized) asrChoice.text = "Распознавание: " + if (prefs.getBoolean("tone_asr", false)) "T-one" else "Vosk"
+        if (::asrChoice.isInitialized) asrChoice.text = "Распознавание: " + SpeechEngines.selected(this).label
         if (::ttsChoice.isInitialized) ttsChoice.text = "Голос: ${voiceLabel(ModelCatalog.voice(this))}"
         val role = getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_ASSISTANT)
+        val voiceService = android.service.voice.VoiceInteractionService.isActiveService(this,
+            android.content.ComponentName(this, AssistantService::class.java))
         val microphone = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         val bluetooth = checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
         val devices = runCatching { AudioRoute.headsets(this) }.getOrDefault(emptyList())
@@ -635,7 +657,7 @@ class SettingsActivity : Activity() {
         }
         if (::capability.isInitialized) {
             capability.text = if (section == SettingsSection.AUDIO) "$deviceDescription\n${if (saved.isBlank()) "Автоматический выбор" else "Предпочтение сохранено; при отключении — текущее устройство"}"
-            else "Ассистент: ${if (role) "выбран" else "не выбран"}\nМикрофон: ${if (microphone) "разрешён" else "не разрешён"}\nBluetooth: ${if (bluetooth) "разрешён" else "не разрешён"}\nЭкран: ${if (PhoneAccessibility.connected != null) "доступ включён" else "доступ выключен"}\nУведомления: ${if (PhoneNotifications.hasAccess(this)) "доступ включён" else "доступ выключен"}\nЗвонки: ${if (CallGuard.hasAccess(this)) "контроль состояния включён" else "через аудиофокус"}"
+            else "Системный ассистент: ${if (role) "выбран" else "не выбран"}\nСистемный голосовой сервис: ${if (voiceService) "выбран" else "не выбран"}\nМикрофон: ${if (microphone) "разрешён" else "не разрешён"}\nBluetooth: ${if (bluetooth) "разрешён" else "не разрешён"}\nЭкран: ${if (PhoneAccessibility.connected != null) "доступ включён" else "доступ выключен"}\nУведомления: ${if (PhoneNotifications.hasAccess(this)) "доступ включён" else "доступ выключен"}\nЗвонки: ${if (CallGuard.hasAccess(this)) "контроль состояния включён" else "через аудиофокус"}"
         }
         navigation.forEach { row ->
             val summary = when (row.section) {
@@ -643,6 +665,7 @@ class SettingsActivity : Activity() {
                 SettingsSection.MODELS -> if (ModelDownload.busy || ModelDownload.importBusy) ModelDownload.message.ifBlank { "Подготавливаю модель…" }
                     else ModelCatalog.selectedBrain(this)?.name?.substringBefore("-Instruct")?.substringBefore("-Q")?.let { "Активна $it" } ?: "Выберите модель для ответов"
                 SettingsSection.AUDIO -> deviceDescription
+                SettingsSection.APPEARANCE -> "Чёрный фон · линия аудиосигнала"
                 SettingsSection.TESTS -> "Голос · канал · диагностика"
                 SettingsSection.PERSONAL -> "Контакты, предпочтения и справка"
                 SettingsSection.CLOCK -> "Таймеры · будильники · календарь"

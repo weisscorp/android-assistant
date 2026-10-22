@@ -1,0 +1,12 @@
+<resources>
+    <style name="Widget.Assistant.Button" parent="android:style/Widget.Material.Button">
+        <item name="android:background">@drawable/button_outline</item>
+        <item name="android:backgroundTint">@null</item>
+        <item name="android:textColor">#FFFFFF</item>
+    </style>
+    <style name="Widget.Assistant.ImageButton" parent="android:style/Widget.Material.ImageButton">
+        <item name="android:background">@drawable/button_outline</item>
+        <item name="android:backgroundTint">@null</item>
+        <item name="android:textColor">#FFFFFF</item>
+    </style>
+</resources>

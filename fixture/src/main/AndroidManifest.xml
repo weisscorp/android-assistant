@@ -3,7 +3,13 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <application android:label="Ассистент: тест полей" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:allowBackup="false">
+        <service android:name=".BrowserPlayerService" android:exported="true" android:foregroundServiceType="mediaPlayback"><intent-filter><action android:name="android.media.browse.MediaBrowserService" /></intent-filter></service>
+        <receiver android:name=".LauncherStateReceiver" android:exported="true" />
         <activity android:name=".ShareActivity" android:exported="true" />
+        <activity android:name=".SpotifyActivity" android:exported="true" />
+        <activity-alias android:name=".SpotifyLauncher" android:targetActivity=".SpotifyActivity" android:enabled="false" android:exported="true" android:label="Spotify">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity-alias>
         <provider android:name=".ShareImageProvider" android:authorities="local.voice.fixture.shared" android:exported="false" android:grantUriPermissions="true" />
         <activity android:name=".WeatherActivity" android:exported="true" />
         <activity-alias android:name=".WeatherLauncher" android:targetActivity=".WeatherActivity" android:enabled="false" android:exported="true" android:label="Windy fixture"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity-alias>
@@ -18,5 +24,8 @@
         <activity android:name=".MediaActivity" android:exported="true" />
         <activity android:name=".NotificationActivity" android:exported="true" />
         <activity android:name=".FieldActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
+        <activity-alias android:name=".CatalogLauncher" android:targetActivity=".FieldActivity" android:enabled="false" android:exported="true" android:label="@string/catalog_label">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity-alias>
     </application>
 </manifest>

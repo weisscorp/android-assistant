@@ -93,6 +93,29 @@ static bool complete_json(const std::string &text) {
     }
     return false;
 }
+// The grammar puts answer first. Decode only its complete JSON string, even when
+// a token also contains the comma/next key. Escapes and braces in the answer are data.
+static std::string ready_answer(const std::string &text) {
+    bool quoted = false, escaped = false;
+    int strings = 0;
+    for (size_t i = 0; i < text.size(); ++i) {
+        const char c = text[i];
+        if (quoted) {
+            if (escaped) escaped = false;
+            else if (c == '\\') escaped = true;
+            else if (c == '"') {
+                quoted = false;
+                if (++strings == 2) {
+                    auto json = nlohmann::ordered_json::parse(text.substr(0, i + 1) + "}", nullptr, false);
+                    if (json.is_object() && json.size() == 1 && json.contains("answer") && json["answer"].is_string())
+                        return json["answer"].get<std::string>();
+                    return "";
+                }
+            }
+        } else if (c == '"') quoted = true;
+    }
+    return "";
+}
 static void fail(JNIEnv *env, const char *message) { env->ThrowNew(env->FindClass("java/lang/IllegalStateException"), message); }
 extern "C" JNIEXPORT void JNICALL Java_local_voice_LocalBrain_nativeOperation(JNIEnv *, jobject, jlong id) { operation.store(id); }
 extern "C" JNIEXPORT jlong JNICALL Java_local_voice_LocalBrain_nativeLoad(JNIEnv *env, jobject, jbyteArray path, jint contextSize) {
@@ -123,7 +146,7 @@ extern "C" JNIEXPORT jlongArray JNICALL Java_local_voice_LocalBrain_nativeStats(
     if (brain) { std::array<jlong, 7> stats{}; std::copy(brain->stats.begin(), brain->stats.end(), stats.begin()); env->SetLongArrayRegion(result, 0, 7, stats.data()); }
     return result;
 }
-extern "C" JNIEXPORT jbyteArray JNICALL Java_local_voice_LocalBrain_nativeGenerate(JNIEnv *env, jobject, jlong handle, jbyteArray prompt, jlong id, jboolean structured, jboolean workflow, jint screenTask, jbyteArray allowedTools, jboolean memoryAnswer, jint threadBudget) {
+extern "C" JNIEXPORT jbyteArray JNICALL Java_local_voice_LocalBrain_nativeGenerate(JNIEnv *env, jobject, jlong handle, jbyteArray prompt, jlong id, jboolean structured, jboolean workflow, jint screenTask, jbyteArray allowedTools, jboolean memoryAnswer, jint threadBudget, jobject answerReady) {
     auto brain = reinterpret_cast<Brain *>(handle);
     if (!brain) { fail(env, "Model not loaded"); return nullptr; }
     auto model = brain->model;
@@ -202,7 +225,7 @@ ws ::= [ \t\n\r]{0,4}
 )";
         }
         if (!screenTask && !workflow) {
-            const std::vector<std::string> known = {"answer", "read_source", "time", "clock", "battery", "weather", "open", "screen", "notifications_all", "notification_latest", "media", "tap", "write", "scroll_down", "scroll_up", "navigate", "call", "server"};
+            const std::vector<std::string> known = {"answer", "audio_notes", "read_source", "time", "clock", "battery", "weather", "open", "screen", "notifications_all", "notification_latest", "media", "tap", "write", "scroll_down", "scroll_up", "navigate", "call", "server"};
             const auto allowed = "," + bytes(env, allowedTools) + ",";
             const auto quoted = [](const std::string &value) { return "\"\\\"" + value + "\\\"\""; };
             std::string choices;
@@ -269,6 +292,13 @@ ws ::= [ \t\n\r]{0,4}
         llama_sampler_chain_add(sampler, constrained);
     }
     llama_sampler_chain_add(sampler, llama_sampler_init_greedy());
+    jmethodID accept = nullptr;
+    if (memoryAnswer && answerReady) {
+        auto callbackClass = env->GetObjectClass(answerReady);
+        accept = env->GetMethodID(callbackClass, "accept", "(Ljava/lang/Object;)V");
+        env->DeleteLocalRef(callbackClass);
+    }
+    bool sentAnswer = false;
     std::string response;
     for (int i = 0; i < (memoryAnswer ? 224 : 160) && !failed; ++i) {
         if (abort_eval(&guard)) { failed = true; break; }
@@ -278,6 +308,16 @@ ws ::= [ \t\n\r]{0,4}
         int n = llama_token_to_piece(vocab, token, piece.data(), piece.size(), 0, false);
         if (n < 0) { piece.resize(-n); n = llama_token_to_piece(vocab, token, piece.data(), piece.size(), 0, false); }
         if (n > 0) response.append(piece.data(), n);
+        if (accept && !sentAnswer && !abort_eval(&guard)) {
+            auto answer = ready_answer(response);
+            if (!answer.empty()) {
+                auto value = output(env, answer);
+                if (value) env->CallVoidMethod(answerReady, accept, value);
+                env->DeleteLocalRef(value);
+                sentAnswer = true;
+                if (env->ExceptionCheck()) { failed = true; break; }
+            }
+        }
         if ((structured || memoryAnswer) && complete_json(response)) break;
         bool stopped = false;
         for (const auto &stop : brain->stops) {
@@ -290,6 +330,7 @@ ws ::= [ \t\n\r]{0,4}
     }
     llama_sampler_free(sampler);
     llama_set_abort_callback(ctx, nullptr, nullptr);
+    if (env->ExceptionCheck()) { brain->clear(); return nullptr; }
     if (failed) { brain->clear(); fail(env, "Local inference cancelled, timed out or failed"); return nullptr; }
     if ((structured || memoryAnswer) && !complete_json(response)) {
         brain->clear(); fail(env, "Model exceeded the token budget before completing JSON"); return nullptr;

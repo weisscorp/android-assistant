@@ -60,10 +60,15 @@ class ClockActivity : Activity() {
             startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
         } }
         ui.button(permissions, "Разрешить уведомления") { requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 31) }
+        ui.text(permissions, "Экран звонка поверх блокировки: ${if (PhoneClocks.fullScreen(this)) "разрешён" else "нужен доступ"}")
+        if (android.os.Build.VERSION.SDK_INT >= 34) ui.button(permissions, "Разрешить полноэкранные сигналы") { perform {
+            startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:$packageName")))
+        } }
+        ui.button(permissions, "Разрешить команду стоп во время звонка") { requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 33) }
         ui.button(permissions, "Настройки сигналов и уведомлений") { perform {
             startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
         } }
-        ui.text(permissions, "Будильник звонит до минуты. Беззвучный режим и «Не беспокоить» соблюдаются. Таймеры и напоминания подают обычный сигнал уведомления. Закрытие приложения не отменяет часы; принудительная остановка в Android может отключить их до следующего запуска.")
+        ui.text(permissions, "Таймер и будильник звонят до остановки, максимум десять минут, через громкость будильника. Во время сигнала можно сказать «стоп» или нажать «Остановить». Микрофон выключается вместе с сигналом. При запрете Android откройте сигнал для команды голосом. Настройки «Не беспокоить» и нулевая громкость будильника не изменяются. Напоминания остаются обычными уведомлениями. Принудительная остановка приложения в Android может отключить часы до следующего запуска.")
         val calendars = ui.group(column, "Календарь")
         val selected = runCatching { ClockCalendar.selected(this) }.getOrNull()
         ui.text(calendars, if (!ClockCalendar.permitted(this)) "Нужен доступ к календарю." else selected?.let { "Выбран: ${it.name}" } ?: "Выберите календарь или создайте локальный.")

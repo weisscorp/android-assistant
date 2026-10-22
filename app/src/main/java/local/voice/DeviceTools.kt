@@ -15,10 +15,11 @@ import java.util.Date
 import java.util.Locale
 
 class DeviceTools(private val context: Context) {
-    data class Reply(val text: String, val afterSpeech: (() -> String?)? = null, val handoff: Boolean = false, val verify: (((String) -> Unit) -> Unit)? = null, val mediaHandoff: (((Boolean, String) -> Unit) -> Unit)? = null, val openedPackage: String? = null, val appSelection: Boolean = false, val beforeOpening: (() -> String?)? = null, val actionPending: Boolean = false, val actionAccepted: Boolean = false, internal val observation: ToolObservation? = null)
-    private data class AppChoice(val pkg: String, val label: String, val version: Long, val installed: Long, val updated: Long)
-    private data class Pending(val until: Long, val action: (() -> Reply)? = null, val contacts: List<ContactChoices.Entry>? = null, val requiresUnlock: Boolean = true, val apps: List<AppChoice>? = null)
+    data class Reply(val text: String, val afterSpeech: (() -> String?)? = null, val handoff: Boolean = false, val verify: (((String) -> Unit) -> Unit)? = null, val mediaHandoff: (((Boolean, String) -> Unit) -> Unit)? = null, val openedPackage: String? = null, val appSelection: Boolean = false, val beforeOpening: (() -> String?)? = null, val actionPending: Boolean = false, val actionAccepted: Boolean = false, internal val observation: ToolObservation? = null, val releaseScreen: Boolean = false)
+    private data class AppChoice(val pkg: String, val label: String, val version: Long, val installed: Long, val updated: Long, val spoken: String = label)
+    private data class Pending(val until: Long, val action: (() -> Reply)? = null, val contacts: List<ContactChoices.Entry>? = null, val requiresUnlock: Boolean = true, val apps: List<AppChoice>? = null, val buttons: List<PhoneAccessibility.Element>? = null, val frame: PhoneAccessibility.ForegroundSnapshot? = null)
     private var pending: Pending? = null
+    internal val choosingApp: Boolean get() = pending?.apps != null
     private var generation = 0L
     private val clocks = ClockTools(context)
     private fun locked() = context.getSystemService(KeyguardManager::class.java).isDeviceLocked
@@ -71,10 +72,20 @@ class DeviceTools(private val context: Context) {
         if (command is VoiceCommand.Choose) {
             if (waiting == null || SystemClock.elapsedRealtime() > waiting.until) return Reply("Нет списка для выбора. Повторите команду.")
             if (waiting.apps != null) {
-                if (locked()) return Reply("Для открытия приложения разблокируйте телефон.")
                 val selected = waiting.apps.getOrNull(command.index)
                     ?: return Reply("Такого варианта нет. Назовите номер приложения из списка или отмена.", appSelection = true).also { pending = waiting }
                 return launchChoice(selected)
+            }
+            if (waiting.buttons != null && waiting.frame != null) {
+                val chosen = waiting.buttons.getOrNull(command.index)
+                    ?: return Reply("Такого номера нет. Скажите номер из списка или отмена.").also { pending = waiting }
+                val service = PhoneAccessibility.connected
+                if (locked() || service?.foregroundSnapshot() != waiting.frame) return Reply("Экран изменился. Скажите кнопки на экране ещё раз.")
+                pending = Pending(SystemClock.elapsedRealtime() + 30_000, action = {
+                    val accepted = !locked() && PhoneAccessibility.connected?.tapElement(chosen, waiting.frame) == true
+                    Reply(if (accepted) "Команда нажатия принята приложением." else "Экран изменился. Нажатие отменено.", actionAccepted = accepted)
+                })
+                return Reply("Нажать ${chosen.label.ifBlank { "кнопку ${command.index + 1}" }}? Скажите да или отмена.", actionPending = true)
             }
             val contact = waiting.contacts?.getOrNull(command.index)
                 ?: return Reply("Такого варианта нет. Назовите номер варианта из списка или отмена.").also { pending = waiting }
@@ -82,6 +93,9 @@ class DeviceTools(private val context: Context) {
         }
         if (command == VoiceCommand.Cancel) return Reply("Отменено.")
         return when (command) {
+            VoiceCommand.Buttons -> buttons()
+            is VoiceCommand.Phone -> PhoneControl(context).execute(command.request)
+            is VoiceCommand.AudioNotes -> Reply(if (locked()) "Разблокируйте телефон для чтения заметок." else AudioNotes(context).summary(command.query))
             is VoiceCommand.HubEvent -> if (locked()) Reply("Разблокируйте телефон для отправки события.") else
                 runCatching { HomeEvents(context).enqueue(command.text); Reply("Событие сохранено в очереди для разбора в Hub.") }
                     .getOrElse { Reply(it.message ?: "Не удалось сохранить событие.") }
@@ -107,43 +121,62 @@ class DeviceTools(private val context: Context) {
         }
     }
     private fun openApp(name: String): Reply {
-        if (locked()) return Reply("Для открытия приложения разблокируйте телефон.")
-        val apps = context.packageManager.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)
-        val spoken = AppNames.canonical(name)
-        if (spoken.isBlank()) return Reply("Назовите приложение.")
-        val exact = apps.filter { AppNames.canonical(it.loadLabel(context.packageManager).toString()) == spoken }
-        val candidates = (if (exact.isNotEmpty()) exact else apps.filter { AppNames.canonical(it.loadLabel(context.packageManager).toString()).contains(spoken) }).distinctBy { it.activityInfo.packageName }
-        if (candidates.isEmpty()) return Reply("Не нашёл приложение $name.")
+        if (AppNames.canonical(name).isBlank()) return Reply("Назовите приложение.")
+        val candidates = AppKnowledge(context).matching(name).map { app -> AppChoice(app.pkg, app.label, app.version, app.installedAt, app.updatedAt, app.russian) }
+        if (candidates.isEmpty()) {
+            val suggestions = AppKnowledge(context).suggestions(name).map { app -> AppChoice(app.pkg, app.label, app.version, app.installedAt, app.updatedAt, app.russian) }
+            if (suggestions.isEmpty()) return Reply("Не нашёл приложение $name. Повторите название или скажите отмена.")
+            pending = Pending(SystemClock.elapsedRealtime() + 60_000, apps = suggestions, requiresUnlock = false,
+                action = if (suggestions.size == 1) ({ launchChoice(suggestions.single()) }) else null)
+            return Reply(if (suggestions.size == 1) "Не уверен, что расслышал название. Вы имели в виду ${suggestions.single().label}? Скажите да или отмена."
+                else "Не уверен в названии. Какое приложение открыть? " + suggestions.mapIndexed { i, app -> "${i + 1}: ${app.label}." }.joinToString(" ") + " Скажите номер или отмена.", appSelection = true)
+        }
         if (candidates.size > 5) return Reply("Нашёл слишком много приложений. Назовите приложение точнее.")
         if (candidates.size > 1) {
-            val choices = candidates.mapNotNull { app -> runCatching {
-                val info = context.packageManager.getPackageInfo(app.activityInfo.packageName, 0)
-                AppChoice(app.activityInfo.packageName, app.loadLabel(context.packageManager).toString(), info.longVersionCode, info.firstInstallTime, info.lastUpdateTime)
-            }.getOrNull() }.sortedWith(compareBy<AppChoice> { AppNames.canonical(it.label) }.thenBy { it.pkg })
-            if (choices.size != candidates.size) return Reply("Список приложений изменился. Повторите команду открытия.")
-            pending = Pending(SystemClock.elapsedRealtime() + 60_000, apps = choices)
+            val choices = candidates.sortedWith(compareBy<AppChoice> { AppNames.canonical(it.label) }.thenBy { it.pkg })
+            pending = Pending(SystemClock.elapsedRealtime() + 60_000, apps = choices, requiresUnlock = false)
             return Reply("Какое приложение открыть? " + choices.mapIndexed { index, app -> "${index + 1}: ${app.label}." }.joinToString(" ") +
                 " Скажите первый, второй или отмена.", appSelection = true)
         }
-        val app = candidates.single()
-        val intent = context.packageManager.getLaunchIntentForPackage(app.activityInfo.packageName) ?: return Reply("Приложение нельзя открыть.")
-        val reply = launch(intent, "Открываю ${app.loadLabel(context.packageManager)}.")
-        return if (reply.afterSpeech != null) reply.copy(openedPackage = app.activityInfo.packageName) else reply
+        return launchChoice(candidates.single())
     }
     private fun appUnchanged(app: AppChoice): Boolean = runCatching {
             val info = context.packageManager.getPackageInfo(app.pkg, 0)
             info.longVersionCode == app.version && info.firstInstallTime == app.installed && info.lastUpdateTime == app.updated &&
-                context.packageManager.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)
+                context.packageManager.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(app.pkg), 0)
                     .any { it.activityInfo.packageName == app.pkg && it.loadLabel(context.packageManager).toString() == app.label }
         }.getOrDefault(false)
     private fun launchChoice(app: AppChoice): Reply {
         val changed = "Список приложений изменился. Повторите команду открытия."
         if (!appUnchanged(app)) return Reply(changed)
         val intent = context.packageManager.getLaunchIntentForPackage(app.pkg) ?: return Reply("Приложение нельзя открыть.")
-        val reply = launch(intent, "Открываю ${app.label}.")
+        if (locked() || context.getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
+            if (app.pkg == PackagePlayback.SPOTIFY) return PackagePlayback.request(context, app.pkg, "Spotify")
+            val until = SystemClock.elapsedRealtime() + 60_000
+            return Reply("Разблокируйте телефон в системном окне. После этого открою приложение.", afterSpeech = {
+                if (SystemClock.elapsedRealtime() > until) "Запрос открытия истёк. Повторите команду."
+                else UnlockAppLaunch.start(context, until) {
+                    if (!appUnchanged(app)) changed
+                    else runCatching {
+                        context.startActivity(Intent(intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); null
+                    }.getOrElse { "Android не разрешил открыть приложение. Повторите команду." }
+                }
+            }, handoff = true)
+        }
+        val reply = launch(intent, "Открываю ${AppSpeechNames.opening(app.spoken)}.")
         return if (reply.afterSpeech != null) reply.copy(openedPackage = app.pkg,
             beforeOpening = { if (appUnchanged(app)) null else changed },
             afterSpeech = { if (!appUnchanged(app)) changed else reply.afterSpeech.invoke() }) else reply
+    }
+    private fun buttons(): Reply {
+        if (locked()) return Reply("Сначала разблокируйте телефон.")
+        val service = PhoneAccessibility.connected ?: return Reply("Включите доступ к экрану в настройках помощника.")
+        val frame = service.foregroundSnapshot() ?: return Reply("Экран приложения недоступен.")
+        val choices = service.elements().filter { it.clickable && !it.editable }.distinctBy { it.bounds }.take(10)
+        if (choices.isEmpty()) return Reply("На этом экране не нашёл доступных кнопок. Можно сказать прочитай экран или прокрути вниз.")
+        pending = Pending(SystemClock.elapsedRealtime() + 60_000, buttons = choices, frame = frame)
+        return Reply(choices.mapIndexed { i, button -> "${i + 1}: ${button.label.ifBlank { "кнопка без названия" }.take(100)}." }.joinToString(" ") +
+            " Скажите номер кнопки или отмена. Перед нажатием уточню.")
     }
     private fun tap(label: String): Reply {
         if (locked()) return Reply("Телефон заблокирован.")

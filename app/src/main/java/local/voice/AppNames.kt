@@ -9,11 +9,13 @@ object AppNames {
         "телеграм" to "telegram", "телеграмм" to "telegram",
         "ватсап" to "whatsapp", "вотсап" to "whatsapp", "вацап" to "whatsapp",
         "ютуб" to "youtube", "ютюб" to "youtube", "ютьюб" to "youtube",
+        "спотифай" to "spotify", "спотифаи" to "spotify", "спотифэй" to "spotify", "спотифей" to "spotify",
         "вконтакте" to "vk", "вк" to "vk",
         "настройки" to "settings", "телефон" to "phone",
         "калькулятор" to "calculator", "камера" to "camera",
         "хром" to "chrome", "файрфокс" to "firefox", "сигнал" to "signal"
     )
+    internal fun seededAliases(label: String): List<String> = aliases.filterValues { it == canonical(label) }.keys.toList()
     fun completeMention(name: String, request: String, labels: List<String>): String {
         val candidate = canonical(name)
         if (candidate.isBlank()) return name

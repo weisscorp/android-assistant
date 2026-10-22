@@ -28,6 +28,8 @@ class ConversationMemoryTest {
             var answer = ""
             val began = android.os.SystemClock.elapsedRealtime()
             instrumentation.runOnMainSync {
+                // This test promises a fresh conversation, independent of preceding model tests.
+                LocalBrain.dropContext()
                 LocalBrain.answerWithMemory(context, emptyList(), "Напомни, куда я собираюсь и каким транспортом предпочитаю ехать?") {
                     answer = it
                     latch.countDown()

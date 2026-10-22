@@ -49,20 +49,20 @@ class ClockRuntimeTest {
         while(!condition() && SystemClock.elapsedRealtime()<deadline) Thread.sleep(50)
         assertTrue("Clock condition timed out",condition())
     }
-    @Test fun exactTimerFiresRealBroadcastAndNotificationOnce() {
+    @Test fun exactTimerFiresRealBroadcastAndRingingServiceOnce() {
         val e = record(PhoneClocks.create(context,ClockKind.TIMER,"Clock test timer",Instant.now().plusSeconds(2),2))
         PhoneClocks.fire(context,e.id) // An early or stale delivery must not fire it.
         assertEquals("pending",entry(e.id).state)
         until { entry(e.id).state == "fired" }
-        until { context.getSystemService(NotificationManager::class.java).activeNotifications.any { it.tag == "clock" && it.id == e.id.toInt() } }
+        until { context.getSystemService(NotificationManager::class.java).activeNotifications.any { it.id == AlarmRingService.NOTIFICATION_ID } }
         val notifications = context.getSystemService(NotificationManager::class.java)
-        val posted = notifications.activeNotifications.single { it.tag == "clock" && it.id == e.id.toInt() }
+        val posted = notifications.activeNotifications.single { it.id == AlarmRingService.NOTIFICATION_ID }
         assertEquals("Clock test timer",posted.notification.extras.getString("android.text"))
         assertFalse(posted.notification.publicVersion.extras.toString().contains("Clock test timer"))
         PhoneClocks.fire(context,e.id)
-        assertEquals(1,notifications.activeNotifications.count { it.tag == "clock" && it.id == e.id.toInt() })
+        assertEquals(1,notifications.activeNotifications.count { it.id == AlarmRingService.NOTIFICATION_ID })
         assertTrue(PhoneClocks.cancel(context,e.id))
-        until { notifications.activeNotifications.none { it.tag == "clock" && it.id == e.id.toInt() } }
+        until { notifications.activeNotifications.none { it.id == AlarmRingService.NOTIFICATION_ID } }
     }
     @Test fun cancelledTimerCannotFireAndTimerIgnoresWallClockChanges() {
         val e = record(PhoneClocks.create(context,ClockKind.TIMER,"Clock test cancelled",Instant.now().plusSeconds(60),60))

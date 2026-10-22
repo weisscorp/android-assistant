@@ -10,7 +10,7 @@ internal object SpokenReply {
     fun answer(raw: String): String = if (hasContent(raw)) raw.trim() else UNAVAILABLE
 
     fun text(raw: String): String {
-        val answer = answer(raw)
+        val answer = SpokenDecimals.text(SpokenCalendar.text(answer(raw)))
         if (answer.length <= LIMIT) return answer
         var end = LIMIT - TRUNCATED.length
         if (answer[end - 1].isHighSurrogate() && answer[end].isLowSurrogate()) end--
