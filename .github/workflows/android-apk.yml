@@ -1,0 +1,156 @@
+name: Android APK
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    outputs:
+      version-code: ${{ steps.version.outputs.version_code }}
+      version-name: ${{ steps.version.outputs.version_name }}
+      channel: ${{ steps.version.outputs.channel }}
+      artifact-id: ${{ steps.apk.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: |
+            **/*.gradle.kts
+            gradle/wrapper/gradle-wrapper.properties
+      - name: Cache pinned native downloads
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.cache/android-assistant-dependencies
+          key: dependencies-${{ runner.os }}-${{ hashFiles('dependencies.json', 'tools/prepare_dependencies.py') }}
+      - name: Cache NDK and CMake
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            /usr/local/lib/android/sdk/ndk/27.2.12479018
+            /usr/local/lib/android/sdk/cmake/3.22.1
+          key: android-native-${{ runner.os }}-${{ runner.arch }}-ndk27.2.12479018-cmake3.22.1
+      - name: Install pinned Android toolchain
+        run: >-
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          'platforms;android-35' 'build-tools;35.0.0'
+          'ndk;27.2.12479018' 'cmake;3.22.1'
+      - name: Test CI tooling
+        run: |
+          python3 -m unittest discover -s tools -p 'test_prepare_dependencies.py' -q
+          python3 -m unittest discover -s tools -p 'test_ci_release.py' -q
+      - name: Verify and prepare public dependencies and assets
+        run: |
+          python3 tools/prepare_dependencies.py --group build
+          python3 tools/prepare_dependencies.py --group speech
+          python3 tools/prepare_dependencies.py --group ocr
+      - name: Allocate version
+        id: version
+        env:
+          SOURCE_REF: ${{ github.ref }}
+        run: python3 tools/ci_release.py version >> "$GITHUB_OUTPUT"
+      - name: Assemble both variants, unit tests and lint (no signing secrets)
+        env:
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+        run: |
+          ./gradlew --no-daemon --max-workers=2 \
+            -PhelmetVersionCode="$VERSION_CODE" -PhelmetVersionName="$VERSION_NAME" \
+            :app:assembleRelease :app:assembleDebug \
+            :app:testDebugUnitTest :app:testReleaseUnitTest :app:lintDebug :app:lintRelease
+      - name: Save unsigned release for isolated signing
+        id: apk
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: unsigned-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+          retention-days: 7
+      - name: Save debug APK and verification reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: checks-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/reports/
+            app/build/test-results/
+          retention-days: 7
+
+  publish:
+    needs: build
+    if: >-
+      github.repository == 'weisscorp/android-assistant' &&
+      ((github.event_name == 'push' &&
+        (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))) ||
+       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    concurrency:
+      group: android-apk-publication
+      cancel-in-progress: false
+    env:
+      VERSION_CODE: ${{ needs.build.outputs.version-code }}
+      VERSION_NAME: ${{ needs.build.outputs.version-name }}
+      CHANNEL: ${{ needs.build.outputs.channel }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Require source on main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install signing and inspection tools
+        run: >-
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'build-tools;35.0.0'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact-id }}
+          path: unsigned
+          merge-multiple: true
+      - name: Reject version regression (including out-of-order runs)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '.[].tag_name' > "$RUNNER_TEMP/release-tags.txt"
+          python3 tools/ci_release.py guard --tags "$RUNNER_TEMP/release-tags.txt" --version-code "$VERSION_CODE"
+      - name: Sign and verify APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          EXPECTED_SIGNER_SHA256: ${{ vars.ANDROID_SIGNER_SHA256 }}
+        run: bash tools/ci_sign.sh
+      - name: Publish immutable release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="apk-$VERSION_CODE"
+          flags=()
+          if [[ "$CHANNEL" == dev ]]; then flags+=(--prerelease --latest=false); fi
+          gh release create "$tag" dist/*.apk dist/manifest.json \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Android $VERSION_NAME ($VERSION_CODE)" \
+            --notes-file dist/release-notes.md "${flags[@]}"
+          cat dist/manifest.json >> "$GITHUB_STEP_SUMMARY"

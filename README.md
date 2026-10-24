@@ -6,6 +6,9 @@ on-device speech, local GGUF models and an optional connection to
 
 [Русский](README.ru.md) · [Build guide](docs/build.md) · [Hub connection](docs/hub.md)
 
+[GitHub Actions APK builds and OTA pull artifacts](docs/ci-cd.md) cover fork-safe
+PR checks, owner-provisioned signing and versioned GitHub Releases.
+
 Optional [development OTA](docs/dev-ota.md) publishes checked owner commits through
 an authenticated HTTPS channel and supports quiet, owner-enabled self-updates.
 

@@ -78,6 +78,10 @@ owner action. Use your own signing key for release builds; never commit it.
 Existing version overrides retain the legacy Gradle properties `helmetVersionCode`
 and `helmetVersionName` for compatibility with earlier development tooling.
 
+GitHub Actions validates both APK variants and publishes trusted signed releases
+for the OTA pull proxy. See [CI/CD and owner signing setup](ci-cd.md) for events,
+version allocation, manifest format, missing voice assets and required secrets.
+
 ## Tests
 
 Python dependency-preparation tests use synthetic archives, no network/devices.
