@@ -83,6 +83,8 @@ def make_manifest(apk, badging, verification, expected_signer, code, name, chann
         raise ValueError("APK signing certificate differs from owner-provisioned fingerprint")
     if not re.fullmatch(r"[0-9a-f]{40}", commit) or repository != "weisscorp/android-assistant":
         raise ValueError("Invalid source provenance")
+    if not 1 <= run_attempt <= 99:
+        raise ValueError("Invalid producing build attempt")
     if channel not in ("dev", "stable"):
         raise ValueError("Unknown release channel")
     guard_version(code, [])
@@ -121,6 +123,8 @@ def main():
     manifest = subs.add_parser("manifest")
     manifest.add_argument("--apk", type=Path, required=True)
     manifest.add_argument("--build-tools", type=Path, required=True)
+    manifest.add_argument("--build-run-attempt", type=int, required=True,
+                          help="Attempt that produced the APK, retained in the build job outputs")
     args = parser.parse_args()
     if args.command == "version":
         code, name, channel = allocate_version(int(os.environ["GITHUB_RUN_NUMBER"]),
@@ -138,7 +142,7 @@ def main():
         result = make_manifest(args.apk, badging, verification, os.environ["EXPECTED_SIGNER_SHA256"],
                                int(os.environ["VERSION_CODE"]), os.environ["VERSION_NAME"],
                                os.environ["CHANNEL"], os.environ["GITHUB_SHA"], os.environ["GITHUB_REPOSITORY"],
-                               os.environ["GITHUB_RUN_ID"], int(os.environ["GITHUB_RUN_ATTEMPT"]), os.environ["GITHUB_REF"])
+                               os.environ["GITHUB_RUN_ID"], args.build_run_attempt, os.environ["GITHUB_REF"])
         print(json.dumps(result, indent=2) + "\n")
 
 

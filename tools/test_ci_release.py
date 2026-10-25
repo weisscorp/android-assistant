@@ -1,10 +1,17 @@
 """Synthetic producer contract tests; no keys, network, Android runtime or devices."""
+from contextlib import redirect_stderr, redirect_stdout
 import hashlib
+import io
+import json
+import os
 from pathlib import Path
+import sys
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 
+import ci_release
 from ci_release import (MAX_VERSION, PUBLIC_ASSETS, allocate_version, guard_version,
                         inspect_badging, make_manifest, normalize_fingerprint, signer_digest)
 
@@ -72,12 +79,45 @@ class ManifestTests(unittest.TestCase):
         self.assertFalse(m["assets"]["offlineVoiceComplete"])
         self.assertNotIn("generation", m)  # Assigned by the proxy, never the producer.
 
+    def manifest_from_publish_rerun(self, producing_attempt):
+        argv = ["ci_release.py", "manifest", "--apk", str(self.apk),
+                "--build-tools", str(self.apk.parent / "synthetic-sdk")]
+        if producing_attempt is not None:
+            argv += ["--build-run-attempt", str(producing_attempt)]
+        environment = {
+            "GITHUB_RUN_ATTEMPT": "2",  # Only the failed publish job was retried.
+            "GITHUB_RUN_ID": "1234", "GITHUB_SHA": "1" * 40,
+            "GITHUB_REPOSITORY": "weisscorp/android-assistant",
+            "GITHUB_REF": "refs/heads/main", "EXPECTED_SIGNER_SHA256": CERT,
+            "VERSION_CODE": "1101", "VERSION_NAME": "dev.1101", "CHANNEL": "dev",
+        }
+        output = io.StringIO()
+        with (mock.patch.dict(os.environ, environment, clear=True),
+              mock.patch.object(sys, "argv", argv),
+              mock.patch("ci_release.subprocess.check_output", side_effect=["", VERIFIED, BADGING]),
+              redirect_stdout(output), redirect_stderr(io.StringIO())):
+            ci_release.main()
+        return json.loads(output.getvalue())
+
+    def test_publication_only_rerun_preserves_the_artifact_producing_attempt(self):
+        m = self.manifest_from_publish_rerun(producing_attempt=1)
+        self.assertEqual(1, m["build"]["runAttempt"])
+        self.assertEqual("1234", m["build"]["runId"])
+        self.assertEqual(1101, m["versionCode"])
+        self.assertEqual(hashlib.sha256(self.apk.read_bytes()).hexdigest(), m["sha256"])
+
+    def test_publish_rerun_cannot_fall_back_to_the_current_attempt(self):
+        with self.assertRaises(SystemExit) as error:
+            self.manifest_from_publish_rerun(producing_attempt=None)
+        self.assertEqual(2, error.exception.code)
+
     def test_metadata_and_signing_mismatches_fail(self):
         for override in [dict(expected_signer="cd" * 32), dict(code=1201), dict(name="other"),
                          dict(badging=BADGING.replace("local.voice", "other.app")),
                          dict(badging=BADGING.replace("arm64-v8a", "x86_64")),
                          dict(commit="main"), dict(repository="fork/android-assistant"),
-                         dict(channel="arbitrary"), dict(verification=VERIFIED + VERIFIED)]:
+                         dict(channel="arbitrary"), dict(verification=VERIFIED + VERIFIED),
+                         dict(run_attempt=0), dict(run_attempt=100)]:
             with self.subTest(override=override), self.assertRaises(ValueError):
                 self.manifest(**override)
 

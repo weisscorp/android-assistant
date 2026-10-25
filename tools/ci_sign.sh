@@ -3,6 +3,7 @@
 set -euo pipefail
 set +x
 umask 077
+: "${BUILD_RUN_ATTEMPT:?Missing producing build attempt from build job}"
 for variable in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD EXPECTED_SIGNER_SHA256; do
   if [[ -z "${!variable:-}" ]]; then
     echo "Missing owner-provisioned signing input: $variable" >&2
@@ -29,7 +30,8 @@ apk="dist/android-assistant-$VERSION_CODE.apk"
   --ks-pass env:ANDROID_KEYSTORE_PASSWORD --key-pass env:ANDROID_KEY_PASSWORD \
   --out "$apk" "$identity_dir/aligned.apk"
 unset ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_PASSWORD ANDROID_KEY_ALIAS CI_KEYSTORE_FILE
-python3 tools/ci_release.py manifest --apk "$apk" --build-tools "$build_tools" > dist/manifest.json
+python3 tools/ci_release.py manifest --apk "$apk" --build-tools "$build_tools" \
+  --build-run-attempt "$BUILD_RUN_ATTEMPT" > dist/manifest.json
 python3 - <<'PY'
 import json
 from pathlib import Path

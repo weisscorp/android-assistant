@@ -112,6 +112,13 @@ regressing the channel. Rerunning a build allocates a new attempt/version; exist
 assets are never overwritten or re-signed in place. GitHub may replace a pending
 concurrency job; skipped numbers are expected.
 
+Retrying only a failed `publish` job reuses the successful build's artifact ID,
+version and producing attempt. The build job exports its attempt alongside the
+artifact ID; publication passes it explicitly to manifest generation.
+`build.runAttempt` always identifies the attempt that assembled and tested the
+APK, even when the current publication attempt is higher. Missing producer
+provenance fails closed instead of falling back to the publication attempt.
+
 Keep this workflow file/identity and its run counter stable. Do not run the old
 Mac watcher as a second version authority. The owner must disable that publisher
 as a separately managed service cutover; this task does not modify mini services.
