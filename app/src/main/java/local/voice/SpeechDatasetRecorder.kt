@@ -1,7 +1,9 @@
 package local.voice
 
 import android.app.*
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.media.*
 import android.os.*
@@ -72,6 +74,8 @@ class SpeechDatasetRecorder:Service() {
                 else communication!=null && it.type==communication.type && it.address==communication.address
             }
             check(preferred!=null){"Выбранный микрофон недоступен"}
+            if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)
+                throw SecurityException("Нет разрешения на микрофон")
             val capture=AudioRecord.Builder().setAudioSource(MediaRecorder.AudioSource.MIC)
                 .setAudioFormat(AudioFormat.Builder().setSampleRate(16000).setChannelMask(AudioFormat.CHANNEL_IN_MONO).setEncoding(AudioFormat.ENCODING_PCM_16BIT).build())
                 .setBufferSizeInBytes(maxOf(6400,AudioRecord.getMinBufferSize(16000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT))).build()
