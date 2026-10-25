@@ -32,10 +32,10 @@ Add these **repository Actions Secrets** yourself:
 
 | Secret | Value |
 | --- | --- |
-| `ANDROID_KEYSTORE_BASE64` | Base64 of the existing matching keystore, one line |
+| `ANDROID_KEYSTORE_BASE64` | Base64 of the new release PKCS12 keystore, one line |
 | `ANDROID_KEYSTORE_PASSWORD` | Keystore password |
-| `ANDROID_KEY_ALIAS` | Alias of the existing signing key |
-| `ANDROID_KEY_PASSWORD` | Private-key password |
+| `ANDROID_KEY_ALIAS` | `assistant-release` |
+| `ANDROID_KEY_PASSWORD` | Same password as the PKCS12 keystore |
 
 Also set the nonsecret **Actions Variable** `ANDROID_SIGNER_SHA256` to the expected
 certificate SHA-256 (64 hex characters, optional colon separators). Publication
@@ -43,21 +43,57 @@ fails if any input is missing or the signed APK differs from that fingerprint.
 Do not put these values in workflow YAML, Git, PR comments or logs. No additional
 PAT, GHCR credential or tailnet credential is needed by this workflow.
 
-Updates of the existing `local.voice` installation require **the same signing
-certificate**. The current private dev OTA uses the owner's existing **debug key**
-(see Assistant Hub `docs/dev-ota.md`). A newly generated runner debug key or a new
-release key cannot update it. Use the matching existing identity; do not generate
-a replacement. This task does not locate, read, copy or upload the owner's key.
+On 25 October 2026 the owner selected a **new release signing certificate** and
+accepted one manual reinstall of `local.voice`. The release identity is PKCS12,
+RSA 4096, valid for 30 years, alias `assistant-release`, subject
+`CN=Assistant Release`. Its randomly generated password is shared by the keystore
+and private key, as required by this PKCS12 setup.
 
-The owner can inspect an already trusted local APK without connecting a phone:
+The previous installation uses a different debug certificate. The first APK
+signed with the new release key requires the owner's manual reinstall; it cannot
+update that debug-signed installation in place. This task does not uninstall or
+install anything on a phone. After migration, **all subsequent updates must keep
+the same new release certificate**. Provision that release fingerprint in
+`ANDROID_SIGNER_SHA256` and the proxy's signer allowlist before enabling ingestion;
+the former MacBook debug certificate is no longer the expected identity.
+
+Local provisioning files live outside Git in `~/.local/share/assistant-signing/`
+(directory mode 0700, all files mode 0600):
+
+| Local file | Purpose |
+| --- | --- |
+| `assistant-release.p12` | Private keystore; retain for future updates |
+| `assistant-release.p12.base64` | Input for `ANDROID_KEYSTORE_BASE64` |
+| `keystore-password.txt` | Input for `ANDROID_KEYSTORE_PASSWORD` |
+| `key-alias.txt` | Input for `ANDROID_KEY_ALIAS` |
+| `key-password.txt` | Input for `ANDROID_KEY_PASSWORD` |
+| `signer-sha256.txt` | Lowercase 64-character certificate SHA-256 for `ANDROID_SIGNER_SHA256` |
+
+The owner runs these commands; agents do not upload these credentials:
 
 ```sh
-"$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs /private/path/known-installed-build.apk
+signing_dir="$HOME/.local/share/assistant-signing"
+gh secret set ANDROID_KEYSTORE_BASE64 --repo weisscorp/android-assistant < "$signing_dir/assistant-release.p12.base64"
+gh secret set ANDROID_KEYSTORE_PASSWORD --repo weisscorp/android-assistant < "$signing_dir/keystore-password.txt"
+gh secret set ANDROID_KEY_ALIAS --repo weisscorp/android-assistant < "$signing_dir/key-alias.txt"
+gh secret set ANDROID_KEY_PASSWORD --repo weisscorp/android-assistant < "$signing_dir/key-password.txt"
+gh variable set ANDROID_SIGNER_SHA256 --repo weisscorp/android-assistant --body "$(cat "$signing_dir/signer-sha256.txt")"
+```
+
+These commands read files without echoing their secret contents. The owner makes
+and safeguards the backup separately: losing this key prevents future updates
+to installations signed by it. No automated backup or credential upload is part
+of this workflow. Never commit the keystore, its base64 or password files.
+
+The owner can inspect a release APK without connecting a phone:
+
+```sh
+"$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs /private/path/new-release.apk
 ```
 
 Compare `Signer #1 certificate SHA-256 digest` to the provisioned variable and
 the proxy's independently provisioned signer allowlist. To inspect the certificate
-in the existing keystore locally, use `keytool -list -v -keystore /private/path/existing.keystore -alias EXISTING_ALIAS`
+in the release keystore locally, use `keytool -list -v -storetype PKCS12 -keystore /private/path/assistant-release.p12 -alias assistant-release`
 and enter the password interactively. Never paste private key material into chat.
 The fingerprint in downloaded JSON alone does not establish a trusted signer.
 
